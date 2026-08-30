@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Menu, X } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Show, UserButton, SignInButton } from "@clerk/react";
 
 export default function Navbar() {
@@ -81,7 +81,7 @@ export default function Navbar() {
 
         {/* Desktop Actions */}
         <div className="hidden items-center gap-3 md:flex">
-          {/* Sign In - Only when logged out */}
+          {/* Logged Out */}
           <Show when="signed-out">
             <SignInButton mode="redirect" forceRedirectUrl="/dashboard">
               <button
@@ -93,12 +93,19 @@ export default function Navbar() {
             </SignInButton>
           </Show>
 
-          {/* User Profile - Only when logged in */}
+          {/* Logged In */}
           <Show when="signed-in">
+            <a
+              href="/dashboard"
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
+            >
+              Dashboard
+            </a>
+
             <UserButton />
           </Show>
 
-          {/* Verify Content */}
+          {/* Primary Product Action */}
           <a
             href="/verify"
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
@@ -112,7 +119,7 @@ export default function Navbar() {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="rounded-lg p-2 text-slate-700 md:hidden"
+          className="rounded-lg p-2 text-slate-700 transition hover:bg-slate-100 md:hidden"
           aria-label="Toggle navigation"
           aria-expanded={mobileOpen}
         >
@@ -121,78 +128,94 @@ export default function Navbar() {
       </nav>
 
       {/* Mobile Navigation */}
-      {mobileOpen && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-          className="border-t border-slate-200 bg-white px-6 py-5 md:hidden"
-        >
-          <div className="flex flex-col gap-4">
-            <a
-              href="#how-it-works"
-              onClick={closeMobileMenu}
-              className="text-sm font-medium text-slate-700"
-            >
-              How It Works
-            </a>
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden border-t border-slate-200 bg-white md:hidden"
+          >
+            <div className="flex flex-col gap-4 px-6 py-5">
+              <a
+                href="#how-it-works"
+                onClick={closeMobileMenu}
+                className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              >
+                How It Works
+              </a>
 
-            <a
-              href="#capabilities"
-              onClick={closeMobileMenu}
-              className="text-sm font-medium text-slate-700"
-            >
-              Capabilities
-            </a>
+              <a
+                href="#capabilities"
+                onClick={closeMobileMenu}
+                className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              >
+                Capabilities
+              </a>
 
-            <a
-              href="#evidence"
-              onClick={closeMobileMenu}
-              className="text-sm font-medium text-slate-700"
-            >
-              Evidence
-            </a>
+              <a
+                href="#evidence"
+                onClick={closeMobileMenu}
+                className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              >
+                Evidence
+              </a>
 
-            <a
-              href="#about"
-              onClick={closeMobileMenu}
-              className="text-sm font-medium text-slate-700"
-            >
-              About
-            </a>
+              <a
+                href="#about"
+                onClick={closeMobileMenu}
+                className="text-sm font-medium text-slate-700 transition hover:text-slate-950"
+              >
+                About
+              </a>
 
-            {/* Mobile Sign In */}
-            <Show when="signed-out">
-              <SignInButton mode="redirect" forceRedirectUrl="/dashboard">
-                <button
-                  type="button"
-                  onClick={closeMobileMenu}
-                  className="mt-2 rounded-lg border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+              <div className="my-1 h-px bg-slate-100" />
+
+              {/* Mobile Logged Out */}
+              <Show when="signed-out">
+                <SignInButton
+                  mode="redirect"
+                  forceRedirectUrl="/dashboard"
                 >
-                  Sign In
-                </button>
-              </SignInButton>
-            </Show>
+                  <button
+                    type="button"
+                    onClick={closeMobileMenu}
+                    className="rounded-lg border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                  >
+                    Sign In
+                  </button>
+                </SignInButton>
+              </Show>
 
-            {/* Mobile User */}
-            <Show when="signed-in">
-              <div className="flex items-center justify-center py-2">
-                <UserButton />
-              </div>
-            </Show>
+              {/* Mobile Logged In */}
+              <Show when="signed-in">
+                <a
+                  href="/dashboard"
+                  onClick={closeMobileMenu}
+                  className="rounded-lg border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                >
+                  Dashboard
+                </a>
 
-            {/* Mobile Verify */}
-            <a
-              href="/verify"
-              onClick={closeMobileMenu}
-              className="rounded-lg bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Verify Content
-            </a>
-          </div>
-        </motion.div>
-      )}
+                <div className="flex items-center justify-center py-2">
+                  <UserButton />
+                </div>
+              </Show>
+
+              {/* Mobile Verify */}
+              <a
+                href="/verify"
+                onClick={closeMobileMenu}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Verify Content
+                <ArrowRight size={16} />
+              </a>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.header>
   );
 }
