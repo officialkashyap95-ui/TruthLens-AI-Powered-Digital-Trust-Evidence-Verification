@@ -17,7 +17,7 @@ function App() {
 
       <Route path="/verify" element={<VerifyPage />} />
 
-      <Route path="/result" element={<ResultPage />} />
+      <Route path="/result/:verificationId" element={<ResultPage />} />
     </Routes>
   );
 }
