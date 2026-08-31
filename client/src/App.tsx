@@ -4,6 +4,7 @@ import LandingPage from "./pages/Landing/LandingPage";
 import SignInPage from "./pages/Auth/SignInPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import VerifyPage from "./pages/Verify/VerifyPage";
+import ResultPage from "./pages/Result/ResultPage";
 
 function App() {
   return (
@@ -15,6 +16,8 @@ function App() {
       <Route path="/dashboard" element={<DashboardPage />} />
 
       <Route path="/verify" element={<VerifyPage />} />
+
+      <Route path="/result" element={<ResultPage />} />
     </Routes>
   );
 }
