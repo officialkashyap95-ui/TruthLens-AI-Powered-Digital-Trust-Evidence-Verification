@@ -245,9 +245,9 @@ export default function VerifyPage() {
                         href="/"
                         className="verify-brand"
                     >
-                        <span className="verify-mark">
-                            <span />
-                        </span>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
+                            <span className="text-sm font-bold">TL</span>
+                        </div>
 
                         TruthLens
                     </a>

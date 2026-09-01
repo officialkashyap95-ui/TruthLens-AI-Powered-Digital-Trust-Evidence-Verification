@@ -17,9 +17,9 @@ function Brand() {
       className="dash-brand"
       aria-label="TruthLens home"
     >
-      <span className="dash-brand-mark" aria-hidden="true">
-        <span />
-      </span>
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
+        <span className="text-sm font-bold">TL</span>
+      </div>
 
       <span>TruthLens</span>
     </a>
@@ -42,13 +42,12 @@ export default function DashboardNavbar() {
             <a
               key={item.label}
               href={item.href}
-              className={`top-nav-link ${
-                item.primary
+              className={`top-nav-link ${item.primary
                   ? "top-nav-primary"
                   : item.label === "Dashboard"
                     ? "is-active"
                     : ""
-              }`}
+                }`}
             >
               {item.label}
             </a>
