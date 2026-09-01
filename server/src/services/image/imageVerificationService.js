@@ -1,57 +1,62 @@
 const crypto = require("crypto");
+const sharp = require("sharp");
 
-/* =========================================================
-   TRUTHLENS IMAGE VERIFICATION ENGINE
+/*
+=========================================================
+ TRUTHLENS IMAGE VERIFICATION ENGINE
+=========================================================
 
-   Analysis layers:
-   1. File validation
-   2. SHA-256 fingerprint
-   3. Binary signature verification
-   4. Image metadata analysis
-   5. JPEG structure / quantization analysis
-   6. Compression indicators
-   7. Editing-software indicators
-   8. Provenance indicators
-   9. AI-generation indicators
-   10. Cross-signal evidence fusion
-   11. Explainable verdict
+Layers:
 
-   IMPORTANT:
-   This service does NOT claim 100% authenticity detection.
-   Individual indicators are probabilistic/contextual.
-========================================================= */
+1. File validation
+2. SHA-256 fingerprint
+3. Binary format validation
+4. Image structure / properties
+5. Metadata / provenance
+6. AI-generation metadata indicators
+7. Compression / file indicators
+8. Gemini Vision analysis
+9. Evidence quality calculation
+10. Evidence fusion
+11. Explainable verdict
+
+IMPORTANT:
+
+- No single signal proves an image is fake.
+- Missing metadata is NOT proof of manipulation.
+- Gemini confidence is NOT the same thing as TruthLens confidence.
+- AI-generated score is treated separately from manipulation score.
+- "Verified" is intentionally difficult to reach.
+- "Unverified" is preferred when evidence is insufficient.
+=========================================================
+*/
 
 
-/* =========================================================
+/* ========================================================
    CONSTANTS
-========================================================= */
+======================================================== */
 
-const MAX_IMAGE_SIZE =
-  10 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
-const ALLOWED_MIME_TYPES =
-  new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-  ]);
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
-const ALLOWED_EXTENSIONS =
-  new Set([
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-  ]);
+const ALLOWED_EXTENSIONS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+]);
 
 
-/* =========================================================
-   SHA-256
-========================================================= */
+/* ========================================================
+   HASH
+======================================================== */
 
-const generateFileHash = (
-  buffer
-) => {
+const generateFileHash = (buffer) => {
   return crypto
     .createHash("sha256")
     .update(buffer)
@@ -59,22 +64,16 @@ const generateFileHash = (
 };
 
 
-/* =========================================================
+/* ========================================================
    FORMAT DETECTION
-========================================================= */
+======================================================== */
 
-const detectImageFormat = (
-  buffer
-) => {
-  if (
-    !buffer ||
-    buffer.length < 12
-  ) {
+const detectImageFormat = (buffer) => {
+  if (!buffer || buffer.length < 12) {
     return "unknown";
   }
 
-  /* JPEG */
-
+  // JPEG
   if (
     buffer[0] === 0xff &&
     buffer[1] === 0xd8 &&
@@ -83,8 +82,7 @@ const detectImageFormat = (
     return "jpeg";
   }
 
-  /* PNG */
-
+  // PNG
   if (
     buffer[0] === 0x89 &&
     buffer[1] === 0x50 &&
@@ -98,19 +96,10 @@ const detectImageFormat = (
     return "png";
   }
 
-  /* WEBP */
-
+  // WEBP
   if (
-    buffer.toString(
-      "ascii",
-      0,
-      4
-    ) === "RIFF" &&
-    buffer.toString(
-      "ascii",
-      8,
-      12
-    ) === "WEBP"
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP"
   ) {
     return "webp";
   }
@@ -119,33 +108,119 @@ const detectImageFormat = (
 };
 
 
-/* =========================================================
-   EXTENSION
-========================================================= */
+/* ========================================================
+   SEARCHABLE IMAGE TEXT
+======================================================== */
 
-const getExtension = (
-  filename = ""
-) => {
-  const index =
-    filename.lastIndexOf(".");
-
-  if (index === -1) {
+const getSearchableImageText = (buffer) => {
+  if (!buffer || !Buffer.isBuffer(buffer)) {
     return "";
   }
 
-  return filename
-    .slice(index)
-    .toLowerCase();
+  /*
+   * Metadata is commonly located near the beginning
+   * of image files.
+   *
+   * Limit inspection to 4 MB.
+   */
+
+  return buffer
+    .subarray(
+      0,
+      Math.min(buffer.length, 4 * 1024 * 1024)
+    )
+    .toString("latin1");
 };
 
 
-/* =========================================================
-   JPEG METADATA
-========================================================= */
+/* ========================================================
+   AI GENERATOR DEFINITIONS
+======================================================== */
 
-const extractJpegMetadata = (
-  buffer
-) => {
+const AI_GENERATORS = [
+  {
+    name: "Midjourney",
+    patterns: [
+      "midjourney",
+    ],
+  },
+
+  {
+    name: "DALL-E",
+    patterns: [
+      "dall-e",
+      "dalle",
+    ],
+  },
+
+  {
+    name: "Stable Diffusion",
+    patterns: [
+      "stable diffusion",
+      "stablediffusion",
+      "automatic1111",
+    ],
+  },
+
+  {
+    name: "ComfyUI",
+    patterns: [
+      "comfyui",
+    ],
+  },
+
+  {
+    name: "Adobe Firefly",
+    patterns: [
+      "adobe firefly",
+      "firefly",
+    ],
+  },
+
+  {
+    name: "Leonardo AI",
+    patterns: [
+      "leonardo ai",
+      "leonardo.ai",
+    ],
+  },
+
+  {
+    name: "Flux",
+    patterns: [
+      "flux.1",
+      "black-forest-labs",
+    ],
+  },
+
+  {
+    name: "Ideogram",
+    patterns: [
+      "ideogram",
+    ],
+  },
+
+  {
+    name: "DreamStudio",
+    patterns: [
+      "dreamstudio",
+    ],
+  },
+
+  {
+    name: "Bing Image Creator",
+    patterns: [
+      "bing image creator",
+    ],
+  },
+];
+
+
+/* ========================================================
+   JPEG METADATA
+======================================================== */
+
+const extractJpegMetadata = (buffer) => {
   const metadata = {
     hasExif: false,
     hasJfif: false,
@@ -155,123 +230,71 @@ const extractJpegMetadata = (
 
     cameraMake: "",
     cameraModel: "",
-
     software: "",
     dateTime: "",
+
+    aiGenerator: "",
   };
 
-  if (
-    !buffer ||
-    buffer.length < 4
-  ) {
+  if (!buffer || buffer.length < 4) {
     return metadata;
   }
 
-  const text =
-    buffer.toString(
-      "latin1",
-      0,
-      Math.min(
-        buffer.length,
-        4 * 1024 * 1024
-      )
-    );
+  const text = getSearchableImageText(buffer);
+  const lowerText = text.toLowerCase();
 
 
-  /* EXIF */
+  /* ------------------------------------------------------
+     EXIF
+  ------------------------------------------------------ */
 
-  if (
-    text.includes("Exif") ||
-    text.includes("EXIF")
-  ) {
-    metadata.hasExif = true;
-  }
+  metadata.hasExif =
+    lowerText.includes("exif");
 
 
-  /* JFIF */
+  /* ------------------------------------------------------
+     JFIF
+  ------------------------------------------------------ */
 
-  if (
-    text.includes("JFIF")
-  ) {
-    metadata.hasJfif = true;
-  }
-
-
-  /* ICC */
-
-  if (
-    text.includes(
-      "ICC_PROFILE"
-    )
-  ) {
-    metadata.hasIccProfile = true;
-  }
+  metadata.hasJfif =
+    lowerText.includes("jfif");
 
 
-  /* Photoshop */
+  /* ------------------------------------------------------
+     ICC PROFILE
+  ------------------------------------------------------ */
 
-  if (
-    text.includes(
-      "Photoshop"
-    ) ||
-    text.includes("8BIM")
-  ) {
-    metadata.hasPhotoshop =
-      true;
-  }
+  metadata.hasIccProfile =
+    lowerText.includes("icc_profile") ||
+    lowerText.includes("icc profile");
 
 
-  /* XMP */
+  /* ------------------------------------------------------
+     PHOTOSHOP
+  ------------------------------------------------------ */
 
-  if (
-    text.includes("XMP") ||
-    text.includes("xmpmeta") ||
-    text.includes(
-      "http://ns.adobe.com"
-    )
-  ) {
-    metadata.hasXmp = true;
-  }
+  metadata.hasPhotoshop =
+    lowerText.includes("photoshop") ||
+    lowerText.includes("8bim");
 
 
-  /* Editing software */
+  /* ------------------------------------------------------
+     XMP
+  ------------------------------------------------------ */
 
-  const softwarePatterns = [
-    "Adobe Photoshop",
-    "Photoshop",
-    "Lightroom",
-    "GIMP",
-    "Snapseed",
-    "PicsArt",
-    "Canva",
-    "Pixelmator",
-    "Affinity Photo",
-    "Paint.NET",
-  ];
-
-  for (
-    const software of softwarePatterns
-  ) {
-    if (
-      text
-        .toLowerCase()
-        .includes(
-          software.toLowerCase()
-        )
-    ) {
-      metadata.software =
-        software;
-
-      break;
-    }
-  }
+  metadata.hasXmp =
+    lowerText.includes("xmpmeta") ||
+    lowerText.includes("ns.adobe.com/xap") ||
+    lowerText.includes("ns.adobe.com/photoshop");
 
 
-  /* Camera manufacturers */
+  /* ------------------------------------------------------
+     CAMERA MANUFACTURERS
+  ------------------------------------------------------ */
 
   const cameraManufacturers = [
     "Canon",
-    "NIKON",
+    "Nikon",
     "SONY",
     "FUJIFILM",
     "Panasonic",
@@ -280,54 +303,98 @@ const extractJpegMetadata = (
     "Samsung",
     "Apple",
     "Google",
-    "HUAWEI",
-    "Xiaomi",
-    "OnePlus",
-    "OPPO",
-    "vivo",
+    "DJI",
+    "GoPro",
   ];
 
-  for (
-    const manufacturer of
-      cameraManufacturers
-  ) {
+  for (const manufacturer of cameraManufacturers) {
     if (
-      text
-        .toLowerCase()
-        .includes(
-          manufacturer.toLowerCase()
-        )
+      lowerText.includes(
+        manufacturer.toLowerCase()
+      )
     ) {
-      metadata.cameraMake =
-        manufacturer;
+      metadata.cameraMake = manufacturer;
+      break;
+    }
+  }
+
+
+  /* ------------------------------------------------------
+     EDITING SOFTWARE
+  ------------------------------------------------------ */
+
+  const editingSoftware = [
+    "Adobe Photoshop",
+    "Adobe Lightroom",
+    "GIMP",
+    "Snapseed",
+    "Canva",
+    "PicsArt",
+    "Pixelmator",
+  ];
+
+  for (const software of editingSoftware) {
+    if (
+      lowerText.includes(
+        software.toLowerCase()
+      )
+    ) {
+      metadata.software = software;
+      break;
+    }
+  }
+
+
+  /* ------------------------------------------------------
+     AI GENERATOR INDICATORS
+  ------------------------------------------------------ */
+
+  for (const generator of AI_GENERATORS) {
+    const found = generator.patterns.some(
+      (pattern) =>
+        lowerText.includes(
+          pattern.toLowerCase()
+        )
+    );
+
+    if (found) {
+      metadata.aiGenerator =
+        generator.name;
 
       break;
     }
   }
 
 
+  /* ------------------------------------------------------
+     DATE
+  ------------------------------------------------------ */
+
+  const dateMatch = text.match(
+    /20\d{2}[-:]\d{2}[-:]\d{2}/
+  );
+
+  if (dateMatch) {
+    metadata.dateTime =
+      dateMatch[0];
+  }
+
   return metadata;
 };
 
 
-/* =========================================================
+/* ========================================================
    GENERAL METADATA
-========================================================= */
+======================================================== */
 
-const extractMetadata = ({
+const extractMetadata = async ({
   buffer,
   mimetype,
   originalname,
 }) => {
+
   const format =
     detectImageFormat(buffer);
-
-  const jpegMetadata =
-    format === "jpeg"
-      ? extractJpegMetadata(
-          buffer
-        )
-      : {};
 
   const metadata = {
     filename:
@@ -350,79 +417,297 @@ const extractMetadata = ({
         ).toFixed(2)
       ),
 
-    hasMetadata:
-      false,
+    hasExif: false,
+    hasJfif: false,
+    hasIccProfile: false,
+    hasPhotoshopMetadata: false,
+    hasXmp: false,
 
-    hasExif:
-      jpegMetadata.hasExif ||
-      false,
+    cameraMake: "",
+    cameraModel: "",
+    software: "",
+    dateTime: "",
 
-    hasJfif:
-      jpegMetadata.hasJfif ||
-      false,
+    aiGenerator: "",
 
-    hasIccProfile:
-      jpegMetadata.hasIccProfile ||
-      false,
-
-    hasPhotoshopMetadata:
-      jpegMetadata.hasPhotoshop ||
-      false,
-
-    hasXmp:
-      jpegMetadata.hasXmp ||
-      false,
-
-    cameraMake:
-      jpegMetadata.cameraMake ||
-      "",
-
-    cameraModel:
-      jpegMetadata.cameraModel ||
-      "",
-
-    software:
-      jpegMetadata.software ||
-      "",
-
-    dateTime:
-      jpegMetadata.dateTime ||
-      "",
+    hasMetadata: false,
   };
+
+
+  /*
+   * First inspect binary metadata.
+   */
+
+  try {
+
+    const image =
+      sharp(buffer);
+
+    const info =
+      await image.metadata();
+
+
+    /*
+     * Sharp may expose EXIF / ICC / XMP related data.
+     */
+
+    metadata.hasExif =
+      Boolean(info.exif);
+
+    metadata.hasIccProfile =
+      Boolean(info.icc);
+
+    metadata.hasXmp =
+      Boolean(info.xmp);
+
+
+    /*
+     * Image format metadata can still be
+     * supplemented by raw binary inspection.
+     */
+
+  } catch (error) {
+
+    console.warn(
+      "[Metadata] Sharp metadata extraction failed:",
+      error.message
+    );
+  }
+
+
+  /*
+   * JPEG-specific raw metadata.
+   */
+
+  if (format === "jpeg") {
+
+    const jpegMetadata =
+      extractJpegMetadata(buffer);
+
+    metadata.hasExif =
+      metadata.hasExif ||
+      jpegMetadata.hasExif;
+
+    metadata.hasJfif =
+      jpegMetadata.hasJfif;
+
+    metadata.hasIccProfile =
+      metadata.hasIccProfile ||
+      jpegMetadata.hasIccProfile;
+
+    metadata.hasPhotoshopMetadata =
+      jpegMetadata.hasPhotoshop;
+
+    metadata.hasXmp =
+      metadata.hasXmp ||
+      jpegMetadata.hasXmp;
+
+    metadata.cameraMake =
+      jpegMetadata.cameraMake;
+
+    metadata.cameraModel =
+      jpegMetadata.cameraModel;
+
+    metadata.software =
+      jpegMetadata.software;
+
+    metadata.dateTime =
+      jpegMetadata.dateTime;
+
+    metadata.aiGenerator =
+      jpegMetadata.aiGenerator;
+  }
+
+
+  /*
+   * PNG / WEBP raw indicator search.
+   */
+
+  if (
+    format === "png" ||
+    format === "webp"
+  ) {
+
+    const text =
+      getSearchableImageText(
+        buffer
+      );
+
+    const lowerText =
+      text.toLowerCase();
+
+
+    for (
+      const generator
+      of AI_GENERATORS
+    ) {
+
+      const found =
+        generator.patterns.some(
+          (pattern) =>
+            lowerText.includes(
+              pattern.toLowerCase()
+            )
+        );
+
+      if (found) {
+
+        metadata.aiGenerator =
+          generator.name;
+
+        break;
+      }
+    }
+
+
+    metadata.hasXmp =
+      metadata.hasXmp ||
+      lowerText.includes("xmpmeta") ||
+      lowerText.includes("ns.adobe.com/xap");
+
+
+    metadata.hasIccProfile =
+      metadata.hasIccProfile ||
+      lowerText.includes("icc_profile") ||
+      lowerText.includes("icc profile");
+  }
+
+
+  /*
+   * JFIF alone does NOT count as meaningful provenance.
+   */
 
   metadata.hasMetadata =
     metadata.hasExif ||
-    metadata.hasJfif ||
     metadata.hasIccProfile ||
     metadata.hasPhotoshopMetadata ||
-    metadata.hasXmp;
+    metadata.hasXmp ||
+    Boolean(metadata.cameraMake) ||
+    Boolean(metadata.cameraModel) ||
+    Boolean(metadata.software) ||
+    Boolean(metadata.dateTime);
+
 
   return metadata;
 };
 
 
-/* =========================================================
-   IMAGE VALIDATION
-========================================================= */
+/* ========================================================
+   IMAGE PROPERTIES
+======================================================== */
+
+const extractImageProperties = async (
+  buffer
+) => {
+
+  try {
+
+    const image =
+      sharp(buffer);
+
+    const info =
+      await image.metadata();
+
+    return {
+
+      width:
+        info.width || 0,
+
+      height:
+        info.height || 0,
+
+      channels:
+        info.channels || 0,
+
+      colorSpace:
+        info.space || "",
+
+      depth:
+        info.depth || "",
+
+      hasAlpha:
+        Boolean(info.hasAlpha),
+
+      orientation:
+        info.orientation || null,
+
+      density:
+        info.density || null,
+
+      format:
+        info.format || "",
+
+      pages:
+        info.pages || 1,
+
+      isAnimated:
+        Boolean(
+          info.pages &&
+          info.pages > 1
+        ),
+
+      megapixels:
+        info.width &&
+        info.height
+          ? Number(
+              (
+                (info.width *
+                  info.height) /
+                1000000
+              ).toFixed(2)
+            )
+          : 0,
+    };
+
+  } catch (error) {
+
+    console.error(
+      "Image property extraction failed:",
+      error.message
+    );
+
+    return {
+
+      width: 0,
+      height: 0,
+      channels: 0,
+      colorSpace: "",
+      depth: "",
+      hasAlpha: false,
+      orientation: null,
+      density: null,
+      format: "",
+      pages: 1,
+      isAnimated: false,
+      megapixels: 0,
+    };
+  }
+};
+
+
+/* ========================================================
+   VALIDATION
+======================================================== */
 
 const validateImage = ({
   buffer,
   mimetype,
   originalname,
 }) => {
+
   if (
     !buffer ||
     !Buffer.isBuffer(buffer)
   ) {
+
     throw new Error(
       "Uploaded image data is missing."
     );
   }
 
 
-  if (
-    buffer.length === 0
-  ) {
+  if (buffer.length === 0) {
+
     throw new Error(
       "Uploaded image is empty."
     );
@@ -433,6 +718,7 @@ const validateImage = ({
     buffer.length >
     MAX_IMAGE_SIZE
   ) {
+
     throw new Error(
       "Image exceeds the maximum allowed size of 10 MB."
     );
@@ -444,6 +730,7 @@ const validateImage = ({
       mimetype
     )
   ) {
+
     throw new Error(
       "Unsupported image type. Only JPG, PNG, and WEBP are supported."
     );
@@ -454,9 +741,8 @@ const validateImage = ({
     detectImageFormat(buffer);
 
 
-  if (
-    format === "unknown"
-  ) {
+  if (format === "unknown") {
+
     throw new Error(
       "The uploaded file does not appear to be a valid JPG, PNG, or WEBP image."
     );
@@ -468,710 +754,344 @@ const validateImage = ({
       ? "jpeg"
       : mimetype === "image/png"
       ? "png"
-      : "webp";
+      : mimetype === "image/webp"
+      ? "webp"
+      : "";
 
 
   if (
+    expectedFormat &&
     format !== expectedFormat
   ) {
+
     throw new Error(
-      "Image MIME type does not match the actual binary file format."
+      "Image MIME type does not match the actual file format."
     );
   }
 
 
-  const extension =
-    getExtension(
-      originalname
-    );
+  if (originalname) {
 
+    const lastDot =
+      originalname.lastIndexOf(".");
 
-  if (
-    extension &&
-    !ALLOWED_EXTENSIONS.has(
-      extension
-    )
-  ) {
-    throw new Error(
-      "Image filename extension is not supported."
-    );
+    if (lastDot !== -1) {
+
+      const extension =
+        originalname
+          .toLowerCase()
+          .slice(lastDot);
+
+      if (
+        !ALLOWED_EXTENSIONS.has(
+          extension
+        )
+      ) {
+
+        throw new Error(
+          "Image filename extension is not supported."
+        );
+      }
+    }
   }
+
 
   return true;
 };
 
 
-/* =========================================================
-   JPEG STRUCTURE ANALYSIS
-========================================================= */
-
-const analyzeJpegStructure = (
-  buffer
-) => {
-  const result = {
-    markerCount: 0,
-    quantizationTables: 0,
-    hasMultipleQuantizationTables: false,
-    hasCommentMarker: false,
-  };
-
-
-  if (
-    !buffer ||
-    buffer.length < 4 ||
-    buffer[0] !== 0xff ||
-    buffer[1] !== 0xd8
-  ) {
-    return result;
-  }
-
-
-  let offset = 2;
-
-
-  while (
-    offset + 1 <
-    buffer.length
-  ) {
-    if (
-      buffer[offset] !== 0xff
-    ) {
-      offset++;
-      continue;
-    }
-
-
-    while (
-      offset < buffer.length &&
-      buffer[offset] === 0xff
-    ) {
-      offset++;
-    }
-
-
-    if (
-      offset >= buffer.length
-    ) {
-      break;
-    }
-
-
-    const marker =
-      buffer[offset++];
-
-    result.markerCount++;
-
-
-    /* Start of scan */
-
-    if (
-      marker === 0xda
-    ) {
-      break;
-    }
-
-
-    /* End of image */
-
-    if (
-      marker === 0xd9
-    ) {
-      break;
-    }
-
-
-    /* Restart markers */
-
-    if (
-      marker >= 0xd0 &&
-      marker <= 0xd7
-    ) {
-      continue;
-    }
-
-
-    if (
-      offset + 1 >=
-      buffer.length
-    ) {
-      break;
-    }
-
-
-    const segmentLength =
-      buffer.readUInt16BE(
-        offset
-      );
-
-
-    if (
-      segmentLength < 2
-    ) {
-      break;
-    }
-
-
-    if (
-      marker === 0xdb
-    ) {
-      result.quantizationTables++;
-    }
-
-
-    if (
-      marker === 0xfe
-    ) {
-      result.hasCommentMarker =
-        true;
-    }
-
-
-    offset += segmentLength;
-  }
-
-
-  result.hasMultipleQuantizationTables =
-    result.quantizationTables > 1;
-
-  return result;
-};
-
-
-/* =========================================================
-   ENTROPY / BYTE ANALYSIS
-========================================================= */
-
-const analyzeByteCharacteristics = (
-  buffer
-) => {
-  if (
-    !buffer ||
-    buffer.length === 0
-  ) {
-    return {
-      entropy: 0,
-      uniqueByteRatio: 0,
-    };
-  }
-
-
-  const counts =
-    new Array(256).fill(0);
-
-
-  for (
-    const byte of buffer
-  ) {
-    counts[byte]++;
-  }
-
-
-  let entropy = 0;
-
-
-  for (
-    const count of counts
-  ) {
-    if (count === 0) {
-      continue;
-    }
-
-
-    const probability =
-      count /
-      buffer.length;
-
-
-    entropy -=
-      probability *
-      Math.log2(
-        probability
-      );
-  }
-
-
-  let unique = 0;
-
-
-  for (
-    const count of counts
-  ) {
-    if (count > 0) {
-      unique++;
-    }
-  }
-
-
-  return {
-    entropy: Number(
-      entropy.toFixed(3)
-    ),
-
-    uniqueByteRatio:
-      Number(
-        (
-          unique / 256
-        ).toFixed(3)
-      ),
-  };
-};
-
-
-/* =========================================================
-   AI-GENERATION INDICATORS
-========================================================= */
-
-/*
- * This is intentionally NOT an AI detector.
- *
- * It looks for provenance/software markers commonly associated
- * with synthetic-image workflows.
- *
- * These indicators alone MUST NOT cause a "fake" verdict.
- */
-
-const analyzeAIGenerationIndicators = ({
-  metadata,
-  buffer,
-}) => {
-  const indicators = [];
-
-  const text =
-    buffer.toString(
-      "latin1",
-      0,
-      Math.min(
-        buffer.length,
-        4 * 1024 * 1024
-      )
-    );
-
-
-  const aiMarkers = [
-    "Stable Diffusion",
-    "Midjourney",
-    "DALL-E",
-    "OpenAI",
-    "Adobe Firefly",
-    "Firefly",
-    "Generative Fill",
-    "ComfyUI",
-    "Automatic1111",
-    "C2PA",
-    "Content Credentials",
-  ];
-
-
-  for (
-    const marker of aiMarkers
-  ) {
-    if (
-      text
-        .toLowerCase()
-        .includes(
-          marker.toLowerCase()
-        )
-    ) {
-      indicators.push(
-        marker
-      );
-    }
-  }
-
-
-  if (
-    metadata.software
-  ) {
-    const software =
-      metadata.software.toLowerCase();
-
-    if (
-      software.includes(
-        "photoshop"
-      ) ||
-      software.includes(
-        "firefly"
-      )
-    ) {
-      indicators.push(
-        metadata.software
-      );
-    }
-  }
-
-
-  return {
-    detected:
-      indicators.length > 0,
-
-    indicators:
-      [
-        ...new Set(
-          indicators
-        ),
-      ],
-  };
-};
-
-
-/* =========================================================
+/* ========================================================
    FORENSIC SIGNALS
-========================================================= */
+======================================================== */
 
 const analyzeForensicSignals = ({
   buffer,
   metadata,
-  jpegStructure,
-  byteCharacteristics,
-  aiIndicators,
+  properties,
 }) => {
+
   const signals = [];
 
 
-  /* -------------------------------------------------------
-     1. Metadata
-  ------------------------------------------------------- */
+  /* ------------------------------------------------------
+     SIGNAL 1 — FILE STRUCTURE
+  ------------------------------------------------------ */
 
   if (
-    metadata.hasMetadata
+    properties.width > 0 &&
+    properties.height > 0
   ) {
+
     signals.push({
+
       name:
-        "Metadata Availability",
+        "Image Structure",
+
+      category:
+        "structure",
 
       score: 0,
+
+      reliability: 0.95,
 
       status:
         "normal",
 
-      category:
-        "provenance",
-
       description:
-        "Detectable image metadata is present. Metadata can provide provenance context, but it can also be modified or removed.",
+        `The image has a valid ${properties.width} × ${properties.height} pixel structure.`,
     });
+
   } else {
+
     signals.push({
+
       name:
-        "Metadata Availability",
-
-      score: 8,
-
-      status:
-        "info",
+        "Image Structure",
 
       category:
-        "provenance",
+        "structure",
 
-      description:
-        "No significant metadata markers were detected. Metadata absence is common after screenshots, downloads, compression, and social-media processing and is not proof of manipulation.",
-    });
-  }
+      score: 30,
 
-
-  /* -------------------------------------------------------
-     2. EXIF
-  ------------------------------------------------------- */
-
-  if (
-    metadata.hasExif
-  ) {
-    signals.push({
-      name:
-        "EXIF Provenance",
-
-      score: 0,
-
-      status:
-        "normal",
-
-      category:
-        "provenance",
-
-      description:
-        "EXIF metadata is available and may provide useful provenance information.",
-    });
-  } else {
-    signals.push({
-      name:
-        "EXIF Provenance",
-
-      score: 4,
-
-      status:
-        "info",
-
-      category:
-        "provenance",
-
-      description:
-        "No EXIF metadata was detected. The original capture information cannot be established from EXIF.",
-    });
-  }
-
-
-  /* -------------------------------------------------------
-     3. Editing software
-  ------------------------------------------------------- */
-
-  if (
-    metadata.software
-  ) {
-    signals.push({
-      name:
-        "Editing Software",
-
-      score: 18,
+      reliability: 0.95,
 
       status:
         "warning",
 
-      category:
-        "editing",
-
       description:
-        `Metadata contains an image-processing software indicator: ${metadata.software}. This suggests the file may have been processed, but processing does not necessarily mean deceptive manipulation.`,
+        "The image dimensions could not be reliably extracted.",
     });
   }
 
 
-  /* -------------------------------------------------------
-     4. Photoshop metadata
-  ------------------------------------------------------- */
+  /* ------------------------------------------------------
+     SIGNAL 2 — METADATA
+  ------------------------------------------------------ */
 
-  if (
-    metadata.hasPhotoshopMetadata
-  ) {
+  if (metadata.hasMetadata) {
+
     signals.push({
+
       name:
-        "Photoshop Metadata",
+        "Metadata Availability",
+
+      category:
+        "provenance",
+
+      score: 0,
+
+      reliability: 0.45,
+
+      status:
+        "normal",
+
+      description:
+        "Detectable metadata is present and may provide provenance context. Metadata can be modified.",
+    });
+
+  } else {
+
+    signals.push({
+
+      name:
+        "Metadata Availability",
+
+      category:
+        "provenance",
+
+      score: 0,
+
+      reliability: 0.30,
+
+      status:
+        "info",
+
+      description:
+        "No significant provenance metadata was detected. Missing metadata is common after screenshots, downloads, compression, messaging, or editing.",
+    });
+  }
+
+
+  /* ------------------------------------------------------
+     SIGNAL 3 — EXIF
+  ------------------------------------------------------ */
+
+  if (metadata.hasExif) {
+
+    signals.push({
+
+      name:
+        "EXIF Data",
+
+      category:
+        "provenance",
+
+      score: 0,
+
+      reliability: 0.55,
+
+      status:
+        "normal",
+
+      description:
+        "EXIF metadata is available and may provide provenance context. EXIF itself can be modified.",
+    });
+  }
+
+
+  /* ------------------------------------------------------
+     SIGNAL 4 — EDITING SOFTWARE
+  ------------------------------------------------------ */
+
+  if (metadata.software) {
+
+    signals.push({
+
+      name:
+        "Editing Software Metadata",
+
+      category:
+        "editing",
 
       score: 15,
 
+      reliability: 0.50,
+
       status:
         "warning",
 
-      category:
-        "editing",
-
       description:
-        "Photoshop-related metadata markers were detected. This is evidence of possible editing history, not proof that the image content is false.",
+        `Metadata contains an indicator associated with ${metadata.software}. This suggests the file passed through editing software, but does not prove visual manipulation.`,
     });
   }
 
 
-  /* -------------------------------------------------------
-     5. JPEG structure
-  ------------------------------------------------------- */
+  /* ------------------------------------------------------
+     SIGNAL 5 — AI GENERATOR METADATA
+  ------------------------------------------------------ */
 
-  if (
-    metadata.format ===
-      "jpeg" &&
-    jpegStructure.quantizationTables >
-      1
-  ) {
+  if (metadata.aiGenerator) {
+
     signals.push({
+
       name:
-        "JPEG Compression Structure",
-
-      score: 8,
-
-      status:
-        "info",
+        "AI Generation Metadata",
 
       category:
-        "compression",
+        "ai-provenance",
 
-      description:
-        "Multiple JPEG quantization tables were detected. This can occur during normal encoding and may also occur after image processing.",
-    });
-  } else {
-    signals.push({
-      name:
-        "JPEG Compression Structure",
+      score: 70,
 
-      score: 0,
+      reliability: 0.90,
 
       status:
-        "normal",
-
-      category:
-        "compression",
+        "warning",
 
       description:
-        "No unusual JPEG quantization-table indicator was identified by this basic structural check.",
+        `Metadata contains an indicator associated with ${metadata.aiGenerator}. This is strong provenance evidence that the file may have been generated or processed using an AI image-generation system.`,
     });
   }
 
 
-  /* -------------------------------------------------------
-     6. File size
-  ------------------------------------------------------- */
+  /* ------------------------------------------------------
+     SIGNAL 6 — COMPRESSION
+  ------------------------------------------------------ */
 
   const sizeKB =
-    buffer.length /
-    1024;
+    buffer.length / 1024;
 
 
   if (
-    sizeKB < 20
+    sizeKB < 20 &&
+    properties.megapixels >= 2
   ) {
+
     signals.push({
+
       name:
-        "File Compression",
-
-      score: 6,
-
-      status:
-        "info",
+        "Compression Indicator",
 
       category:
         "compression",
 
-      description:
-        "The image is unusually small. Strong compression or resizing may have occurred, although file size alone cannot establish manipulation.",
-    });
-  } else {
-    signals.push({
-      name:
-        "File Compression",
+      score: 5,
 
-      score: 0,
+      reliability: 0.20,
 
       status:
-        "normal",
+        "info",
+
+      description:
+        "The image is relatively small compared with its pixel dimensions. This may indicate resizing or compression, but it is not a strong manipulation indicator.",
+    });
+
+  } else {
+
+    signals.push({
+
+      name:
+        "Compression Indicator",
 
       category:
         "compression",
 
-      description:
-        "The file size does not produce a strong compression warning.",
-    });
-  }
-
-
-  /* -------------------------------------------------------
-     7. AI-generation markers
-  ------------------------------------------------------- */
-
-  if (
-    aiIndicators.detected
-  ) {
-    signals.push({
-      name:
-        "Synthetic Media Metadata",
-
-      score: 25,
-
-      status:
-        "warning",
-
-      category:
-        "synthetic-media",
-
-      description:
-        `Metadata or embedded markers associated with synthetic-image tooling were detected: ${aiIndicators.indicators.join(
-          ", "
-        )}. These markers should be treated as supporting evidence rather than definitive proof.`,
-    });
-  } else {
-    signals.push({
-      name:
-        "Synthetic Media Metadata",
-
       score: 0,
+
+      reliability: 0.20,
 
       status:
         "normal",
 
-      category:
-        "synthetic-media",
-
       description:
-        "No recognizable synthetic-image software markers were detected in the available file metadata.",
+        "No strong compression warning was identified from file size and dimensions.",
     });
   }
 
 
-  /* -------------------------------------------------------
-     8. Camera provenance
-  ------------------------------------------------------- */
+  /* ------------------------------------------------------
+     SIGNAL 7 — CAMERA PROVENANCE
+  ------------------------------------------------------ */
 
-  if (
-    metadata.cameraMake
-  ) {
+  if (metadata.cameraMake) {
+
     signals.push({
+
       name:
         "Camera Provenance",
-
-      score: 0,
-
-      status:
-        "normal",
 
       category:
         "provenance",
 
-      description:
-        `Camera manufacturer information was detected: ${metadata.cameraMake}. This can support provenance analysis but does not prove authenticity.`,
-    });
-  } else {
-    signals.push({
-      name:
-        "Camera Provenance",
-
-      score: 3,
-
-      status:
-        "info",
-
-      category:
-        "provenance",
-
-      description:
-        "No identifiable camera manufacturer was detected.",
-    });
-  }
-
-
-  /* -------------------------------------------------------
-     9. Binary entropy
-  ------------------------------------------------------- */
-
-  if (
-    byteCharacteristics.entropy >
-    7.8
-  ) {
-    signals.push({
-      name:
-        "Binary Entropy",
-
-      score: 2,
-
-      status:
-        "info",
-
-      category:
-        "file-structure",
-
-      description:
-        "The file has high byte-level entropy. This is expected for many compressed images and is not, by itself, evidence of manipulation.",
-    });
-  } else {
-    signals.push({
-      name:
-        "Binary Entropy",
-
       score: 0,
+
+      reliability: 0.45,
 
       status:
         "normal",
 
+      description:
+        `Camera-related metadata indicates ${metadata.cameraMake}. This provides provenance context but is not proof of authenticity.`,
+    });
+
+  } else {
+
+    signals.push({
+
+      name:
+        "Camera Provenance",
+
       category:
-        "file-structure",
+        "provenance",
+
+      score: 0,
+
+      reliability: 0.20,
+
+      status:
+        "info",
 
       description:
-        "No unusual byte-level entropy indicator was identified.",
+        "No identifiable camera manufacturer was found in the available metadata.",
     });
   }
 
@@ -1180,114 +1100,726 @@ const analyzeForensicSignals = ({
 };
 
 
-/* =========================================================
-   EVIDENCE FUSION
-========================================================= */
+/* ========================================================
+   NORMALIZE GEMINI VISION
+======================================================== */
 
-const calculateRiskScore = (
-  signals
+const normalizeVisionResult = (
+  visionResult
 ) => {
+
+  if (!visionResult) {
+
+    return {
+
+      available: false,
+
+      classification:
+        "UNVERIFIED",
+
+      aiGeneratedScore:
+        null,
+
+      manipulationScore:
+        null,
+
+      visualAuthenticityScore:
+        null,
+
+      confidence:
+        0,
+
+      verdict:
+        "Insufficient Evidence",
+
+      findings: [],
+
+      manipulationIndicators: [],
+
+      authenticityIndicators: [],
+
+      limitations: [],
+
+      description:
+        "Visual AI analysis was unavailable.",
+
+      evidenceQuality:
+        0,
+    };
+  }
+
+
+  const clamp = (
+    value
+  ) => {
+
+    const number =
+      Number(value);
+
+    if (
+      !Number.isFinite(number)
+    ) {
+
+      return null;
+    }
+
+    return Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(number)
+      )
+    );
+  };
+
+
+  const manipulationScore =
+    clamp(
+      visionResult.manipulationScore
+    );
+
+
+  const aiGeneratedScore =
+    clamp(
+      visionResult.aiGeneratedScore
+    );
+
+
+  const visualAuthenticityScore =
+    clamp(
+      visionResult.visualAuthenticityScore
+    );
+
+
+  const confidence =
+    clamp(
+      visionResult.confidence
+    ) ?? 0;
+
+
+  const classification =
+    visionResult.classification ||
+    "UNVERIFIED";
+
+
+  const findings =
+    Array.isArray(
+      visionResult.visualIndicators
+    )
+      ? visionResult.visualIndicators
+      : [];
+
+
+  const manipulationIndicators =
+    Array.isArray(
+      visionResult.manipulationIndicators
+    )
+      ? visionResult.manipulationIndicators
+      : [];
+
+
+  const authenticityIndicators =
+    Array.isArray(
+      visionResult.authenticityIndicators
+    )
+      ? visionResult.authenticityIndicators
+      : [];
+
+
+  const limitations =
+    Array.isArray(
+      visionResult.limitations
+    )
+      ? visionResult.limitations
+      : [];
+
+
+  /*
+   * Evidence quality.
+   */
+
+  let evidenceQuality = 0;
+
+
   if (
-    !signals ||
-    signals.length === 0
+    manipulationScore !== null
   ) {
+
+    evidenceQuality += 20;
+  }
+
+
+  if (
+    aiGeneratedScore !== null
+  ) {
+
+    evidenceQuality += 20;
+  }
+
+
+  if (
+    visualAuthenticityScore !== null
+  ) {
+
+    evidenceQuality += 10;
+  }
+
+
+  if (
+    confidence >= 70
+  ) {
+
+    evidenceQuality += 25;
+
+  } else if (
+    confidence >= 50
+  ) {
+
+    evidenceQuality += 18;
+
+  } else if (
+    confidence >= 30
+  ) {
+
+    evidenceQuality += 8;
+  }
+
+
+  if (
+    findings.length >= 3
+  ) {
+
+    evidenceQuality += 10;
+
+  } else if (
+    findings.length >= 1
+  ) {
+
+    evidenceQuality += 5;
+  }
+
+
+  if (
+    manipulationIndicators.length >= 2
+  ) {
+
+    evidenceQuality += 10;
+
+  } else if (
+    manipulationIndicators.length >= 1
+  ) {
+
+    evidenceQuality += 5;
+  }
+
+
+  evidenceQuality =
+    Math.min(
+      100,
+      evidenceQuality
+    );
+
+
+  /*
+   * Human-readable visual verdict.
+   */
+
+  let verdict =
+    "Insufficient Evidence";
+
+
+  switch (
+    classification
+  ) {
+
+    case "AI_GENERATED":
+
+      verdict =
+        "Likely AI Generated";
+
+      break;
+
+
+    case "LIKELY_MANIPULATED":
+
+      verdict =
+        "Likely Manipulated";
+
+      break;
+
+
+    case "LIKELY_AUTHENTIC":
+
+      verdict =
+        "Likely Authentic";
+
+      break;
+
+
+    case "UNVERIFIED":
+
+    default:
+
+      verdict =
+        "Insufficient Evidence";
+
+      break;
+  }
+
+
+  return {
+
+    available:
+      true,
+
+    classification,
+
+    aiGeneratedScore,
+
+    manipulationScore,
+
+    score:
+      manipulationScore,
+
+    visualAuthenticityScore,
+
+    confidence,
+
+    verdict,
+
+    findings,
+
+    manipulationIndicators,
+
+    authenticityIndicators,
+
+    limitations,
+
+    description:
+      visionResult.summary ||
+      "Visual AI analysis completed.",
+
+    evidenceQuality,
+  };
+};
+
+
+/* ========================================================
+   FORENSIC RISK
+======================================================== */
+
+const calculateForensicRisk = (
+  forensicSignals
+) => {
+
+  if (
+    !Array.isArray(
+      forensicSignals
+    ) ||
+    forensicSignals.length === 0
+  ) {
+
     return 0;
   }
 
 
+  const weightedRisk =
+    forensicSignals.reduce(
+      (total, signal) => {
+
+        if (
+          signal.status !==
+          "warning"
+        ) {
+
+          return total;
+        }
+
+
+        const score =
+          Number(
+            signal.score || 0
+          );
+
+
+        const reliability =
+          Number(
+            signal.reliability || 0
+          );
+
+
+        return (
+          total +
+          score *
+            reliability
+        );
+      },
+
+      0
+    );
+
+
+  return Math.round(
+    Math.min(
+      100,
+      weightedRisk
+    )
+  );
+};
+
+
+/* ========================================================
+   EVIDENCE QUALITY
+======================================================== */
+
+const calculateEvidenceQuality = ({
+  forensicSignals,
+  vision,
+}) => {
+
+  let quality = 0;
+
+
   /*
-   * Only warning signals contribute strongly.
-   * Informational signals have deliberately small weight.
+   * Structural validation
    */
 
-  let risk = 0;
+  const structureSignal =
+    forensicSignals.find(
+      (signal) =>
+        signal.name ===
+        "Image Structure"
+    );
 
 
-  for (
-    const signal of signals
+  if (
+    structureSignal &&
+    structureSignal.status ===
+      "normal"
   ) {
-    if (
-      signal.status ===
-      "warning"
-    ) {
-      risk +=
-        Number(
-          signal.score || 0
-        );
-    }
 
-    if (
-      signal.status ===
-      "info"
-    ) {
-      risk +=
-        Number(
-          signal.score || 0
-        ) *
-        0.35;
-    }
+    quality += 20;
+  }
+
+
+  /*
+   * Metadata / provenance
+   */
+
+  const metadataSignal =
+    forensicSignals.find(
+      (signal) =>
+        signal.name ===
+        "Metadata Availability"
+    );
+
+
+  if (
+    metadataSignal &&
+    metadataSignal.status ===
+      "normal"
+  ) {
+
+    quality += 15;
+  }
+
+
+  /*
+   * AI metadata
+   */
+
+  const aiMetadataSignal =
+    forensicSignals.find(
+      (signal) =>
+        signal.name ===
+        "AI Generation Metadata"
+    );
+
+
+  if (aiMetadataSignal) {
+
+    quality += 30;
+  }
+
+
+  /*
+   * Visual AI
+   */
+
+  if (
+    vision.available
+  ) {
+
+    quality +=
+      Math.round(
+        vision.evidenceQuality *
+          0.35
+      );
   }
 
 
   return Math.min(
     100,
-    Math.round(risk)
+    Math.round(
+      quality
+    )
   );
 };
 
 
-/* =========================================================
-   CONFIDENCE
-========================================================= */
+/* ========================================================
+   EVIDENCE FUSION
+======================================================== */
 
-const calculateConfidence = ({
-  riskScore,
-  signals,
+const calculateFusion = ({
+  forensicSignals,
+  vision,
 }) => {
-  const warningCount =
-    signals.filter(
-      (signal) =>
-        signal.status ===
-        "warning"
-    ).length;
 
-
-  const categories =
-    new Set(
-      signals
-        .filter(
-          (signal) =>
-            signal.status ===
-            "warning"
-        )
-        .map(
-          (signal) =>
-            signal.category
-        )
+  const forensicRisk =
+    calculateForensicRisk(
+      forensicSignals
     );
 
 
   /*
-   * Confidence increases when independent
-   * categories agree.
+   * Manipulation risk.
    */
 
+  const manipulationRisk =
+    vision.available &&
+    Number.isFinite(
+      vision.manipulationScore
+    )
+      ? vision.manipulationScore
+      : null;
+
+
+  /*
+   * AI generation risk.
+   */
+
+  const aiGenerationRisk =
+    vision.available &&
+    Number.isFinite(
+      vision.aiGeneratedScore
+    )
+      ? vision.aiGeneratedScore
+      : null;
+
+
+  /*
+   * Combine Gemini's two visual dimensions.
+   *
+   * Manipulation and AI generation are related
+   * but NOT identical.
+   */
+
+  let visualRisk = null;
+
+
   if (
-    warningCount === 0
+    manipulationRisk !== null &&
+    aiGenerationRisk !== null
   ) {
-    return 35;
+
+    visualRisk =
+      Math.round(
+        manipulationRisk * 0.55 +
+        aiGenerationRisk * 0.45
+      );
+
+  } else if (
+    manipulationRisk !== null
+  ) {
+
+    visualRisk =
+      manipulationRisk;
+
+  } else if (
+    aiGenerationRisk !== null
+  ) {
+
+    visualRisk =
+      aiGenerationRisk;
   }
 
 
-  let confidence =
-    40 +
-    warningCount * 5 +
-    categories.size * 5;
+  /*
+   * Gemini classification can provide an
+   * additional high-level signal.
+   */
+
+  let classificationBoost = 0;
 
 
   if (
-    riskScore < 20
+    vision.classification ===
+    "AI_GENERATED" &&
+    vision.confidence >= 60
   ) {
+
+    classificationBoost = 10;
+  }
+
+
+  if (
+    vision.classification ===
+    "LIKELY_MANIPULATED" &&
+    vision.confidence >= 60
+  ) {
+
+    classificationBoost = 8;
+  }
+
+
+  /*
+   * Dynamic fusion.
+   */
+
+  let riskScore;
+
+
+  if (
+    visualRisk !== null &&
+    vision.confidence >= 70
+  ) {
+
+    riskScore =
+      forensicRisk * 0.25 +
+      visualRisk * 0.75;
+
+  } else if (
+    visualRisk !== null &&
+    vision.confidence >= 50
+  ) {
+
+    riskScore =
+      forensicRisk * 0.40 +
+      visualRisk * 0.60;
+
+  } else if (
+    visualRisk !== null &&
+    vision.confidence >= 30
+  ) {
+
+    riskScore =
+      forensicRisk * 0.60 +
+      visualRisk * 0.40;
+
+  } else {
+
+    riskScore =
+      forensicRisk;
+  }
+
+
+  /*
+   * Classification boost is deliberately small.
+   *
+   * It cannot independently create a fake verdict.
+   */
+
+  riskScore +=
+    classificationBoost;
+
+
+  /*
+   * Strong AI metadata can increase the
+   * overall risk, but only as provenance evidence.
+   */
+
+  const hasAiMetadata =
+    forensicSignals.some(
+      (signal) =>
+        signal.name ===
+          "AI Generation Metadata" &&
+        signal.status ===
+          "warning"
+    );
+
+
+  if (
+    hasAiMetadata
+  ) {
+
+    riskScore += 8;
+  }
+
+
+  riskScore =
+    Math.round(
+      Math.max(
+        0,
+        Math.min(
+          100,
+          riskScore
+        )
+      )
+    );
+
+
+  /*
+   * Evidence quality.
+   */
+
+  const evidenceQuality =
+    calculateEvidenceQuality({
+      forensicSignals,
+      vision,
+    });
+
+
+  /*
+   * Overall TruthLens confidence.
+   */
+
+  let confidence =
+    evidenceQuality;
+
+
+  /*
+   * Vision unavailable.
+   */
+
+  if (
+    !vision.available
+  ) {
+
+    confidence =
+      Math.min(
+        confidence,
+        40
+      );
+  }
+
+
+  /*
+   * Vision says insufficient evidence.
+   */
+
+  if (
+    vision.verdict ===
+      "Insufficient Evidence"
+  ) {
+
+    confidence =
+      Math.min(
+        confidence,
+        55
+      );
+  }
+
+
+  /*
+   * Very low visual confidence.
+   */
+
+  if (
+    vision.available &&
+    vision.confidence < 30
+  ) {
+
     confidence =
       Math.min(
         confidence,
@@ -1296,274 +1828,651 @@ const calculateConfidence = ({
   }
 
 
-  return Math.min(
-    85,
+  confidence =
     Math.round(
-      confidence
-    )
-  );
-};
-
-
-/* =========================================================
-   VERDICT
-========================================================= */
-
-const determineVerdict = ({
-  riskScore,
-  signals,
-}) => {
-  const warnings =
-    signals.filter(
-      (signal) =>
-        signal.status ===
-        "warning"
-    );
-
-
-  const categories =
-    new Set(
-      warnings.map(
-        (signal) =>
-          signal.category
+      Math.max(
+        0,
+        Math.min(
+          95,
+          confidence
+        )
       )
     );
 
 
   /*
-   * Strong verdict requires:
-   * - meaningful risk
-   * - multiple warning categories
+   * Count independent evidence categories.
+   */
+
+  const categories =
+    new Set(
+      forensicSignals
+        .filter(
+          (signal) =>
+            signal.status ===
+              "warning" ||
+            signal.status ===
+              "normal"
+        )
+        .map(
+          (signal) =>
+            signal.category
+        )
+    );
+
+
+  const independentSignals =
+    categories.size;
+
+
+  return {
+
+    riskScore,
+
+    confidence,
+
+    forensicRisk,
+
+    visualRisk:
+      visualRisk === null
+        ? null
+        : Math.round(
+            visualRisk
+          ),
+
+    manipulationRisk,
+
+    aiGenerationRisk,
+
+    evidenceQuality,
+
+    independentSignals,
+
+    classificationBoost,
+
+    hasAiMetadata,
+  };
+};
+
+
+/* ========================================================
+   FINAL VERDICT
+======================================================== */
+
+const determineVerdict = ({
+  riskScore,
+  confidence,
+  vision,
+  forensicSignals,
+}) => {
+
+  const hasStrongAiMetadata =
+    forensicSignals.some(
+      (signal) =>
+        signal.name ===
+          "AI Generation Metadata" &&
+        signal.status ===
+          "warning"
+    );
+
+
+  /*
+   * Strong AI-generated signal.
    *
-   * This prevents metadata alone from
-   * declaring an image fake.
+   * This fixes the previous weakness where
+   * AI_GENERATED classification was ignored.
+   */
+
+  const strongAiVision =
+    vision.available &&
+    vision.classification ===
+      "AI_GENERATED" &&
+    vision.aiGeneratedScore !== null &&
+    vision.aiGeneratedScore >= 70 &&
+    vision.confidence >= 65;
+
+
+  /*
+   * Strong manipulation signal.
+   */
+
+  const strongManipulationVision =
+    vision.available &&
+    vision.manipulationScore !== null &&
+    vision.manipulationScore >= 70 &&
+    vision.confidence >= 65;
+
+
+  /*
+   * ------------------------------------------------------
+   * STRONG MANIPULATION / AI GENERATED
+   * ------------------------------------------------------
    */
 
   if (
-    riskScore >= 45 &&
-    warnings.length >= 2 &&
-    categories.size >= 2
+    riskScore >= 75 &&
+    confidence >= 65 &&
+    (
+      hasStrongAiMetadata ||
+      strongAiVision ||
+      strongManipulationVision
+    )
   ) {
+
     return {
+
       verdict:
         "Likely Manipulated / Misleading",
 
-      confidence:
-        calculateConfidence({
-          riskScore,
-          signals,
-        }),
+      label:
+        "LIKELY MANIPULATED / MISLEADING",
 
       summary:
-        "Multiple independent forensic indicators suggest that the image may have been processed, edited, or contain synthetic-media characteristics. The result is probabilistic and does not establish manipulation with certainty.",
-    };
-  }
+        "Multiple evidence signals indicate a high likelihood that the image is synthetically generated, manipulated, or has misleading provenance.",
 
-
-  if (
-    riskScore >= 18 &&
-    warnings.length >= 1
-  ) {
-    return {
-      verdict:
-        "Suspicious",
-
-      confidence:
-        calculateConfidence({
-          riskScore,
-          signals,
-        }),
-
-      summary:
-        "The image contains one or more indicators that require additional scrutiny. These indicators may result from ordinary editing, compression, or synthetic-media processing and should not be treated as conclusive proof.",
+      recommendation:
+        "Treat the image with caution and verify its original source or provenance before relying on it.",
     };
   }
 
 
   /*
-   * IMPORTANT:
+   * ------------------------------------------------------
+   * AI GENERATED
    *
-   * No suspicious indicator does NOT mean
-   * the image is authentic.
+   * If Gemini strongly identifies synthetic
+   * generation, allow a suspicious verdict
+   * even when traditional manipulation score
+   * is not high.
+   * ------------------------------------------------------
+   */
+
+  if (
+    strongAiVision &&
+    confidence >= 50 &&
+    riskScore >= 55
+  ) {
+
+    return {
+
+      verdict:
+        "Likely Manipulated / Misleading",
+
+      label:
+        "LIKELY MANIPULATED / MISLEADING",
+
+      summary:
+        "Visual AI analysis indicates that the image is likely AI-generated. This is a strong synthetic-media signal, although no detector can establish authenticity with absolute certainty.",
+
+      recommendation:
+        "Treat the image as potentially synthetic and verify the original source before trusting it.",
+    };
+  }
+
+
+  /*
+   * ------------------------------------------------------
+   * SUSPICIOUS
+   * ------------------------------------------------------
+   */
+
+  if (
+    riskScore >= 45 &&
+    confidence >= 45
+  ) {
+
+    return {
+
+      verdict:
+        "Suspicious",
+
+      label:
+        "SUSPICIOUS",
+
+      summary:
+        "The image contains multiple signals that warrant caution. However, the available evidence is not strong enough to establish manipulation with high certainty.",
+
+      recommendation:
+        "Verify the image's original source and context before relying on it.",
+    };
+  }
+
+
+  /*
+   * ------------------------------------------------------
+   * VERIFIED
+   *
+   * Deliberately difficult to reach.
+   * ------------------------------------------------------
+   */
+
+  if (
+    riskScore < 25 &&
+    confidence >= 70 &&
+    vision.available &&
+    vision.confidence >= 60 &&
+    vision.manipulationScore !== null &&
+    vision.manipulationScore < 30 &&
+    (
+      vision.aiGeneratedScore === null ||
+      vision.aiGeneratedScore < 30
+    )
+  ) {
+
+    return {
+
+      verdict:
+        "Verified",
+
+      label:
+        "VERIFIED",
+
+      summary:
+        "The available visual and forensic evidence is consistent with an authentic image. This result does not constitute proof of authenticity.",
+
+      recommendation:
+        "The available evidence supports authenticity, but the original source should still be considered when making high-stakes decisions.",
+    };
+  }
+
+
+  /*
+   * ------------------------------------------------------
+   * UNVERIFIED
+   * ------------------------------------------------------
    */
 
   return {
+
     verdict:
       "Unverified",
 
-    confidence:
-      calculateConfidence({
-        riskScore,
-        signals,
-      }),
+    label:
+      "UNVERIFIED",
 
     summary:
-      "No strong manipulation indicators were identified by the available forensic checks. This does not prove that the image is authentic because sophisticated manipulation can leave little detectable evidence.",
+      "TruthLens could not obtain enough independent evidence to establish whether the image is authentic or manipulated.",
+
+    recommendation:
+      "Verify the original source, context, and provenance before relying on the image.",
   };
 };
 
 
-/* =========================================================
-   ANALYSIS EXPLANATIONS
-========================================================= */
+/* ========================================================
+   BUILD ANALYSIS
+======================================================== */
 
 const buildAnalysis = ({
   metadata,
+  properties,
   signals,
-  jpegStructure,
-  aiIndicators,
+  vision,
+  fusion,
 }) => {
-  const warningSignals =
-    signals.filter(
-      (signal) =>
-        signal.status ===
-        "warning"
-    );
+
+  const analysis = [];
 
 
-  return [
-    {
+  /* ------------------------------------------------------
+     Visual AI
+  ------------------------------------------------------ */
+
+  analysis.push({
+
+    title:
+      "Visual AI Analysis",
+
+    description:
+      vision.available
+
+        ? `Gemini Vision estimated manipulation risk at ${
+            vision.manipulationScore === null
+              ? "unknown"
+              : vision.manipulationScore
+          }/100 and AI-generation likelihood at ${
+            vision.aiGeneratedScore === null
+              ? "unknown"
+              : vision.aiGeneratedScore
+          }/100 with ${
+            Math.round(
+              vision.confidence
+            )
+          }% model confidence. Classification: ${
+            vision.classification
+          }.`
+
+        : "Visual AI analysis was unavailable.",
+  });
+
+
+  /* ------------------------------------------------------
+     File
+  ------------------------------------------------------ */
+
+  analysis.push({
+
+    title:
+      "File Analysis",
+
+    description:
+      `The uploaded ${metadata.format.toUpperCase()} image is ${
+        properties.width
+      } × ${
+        properties.height
+      } pixels (${
+        properties.megapixels
+      } MP) and ${
+        metadata.sizeMB
+      } MB.`,
+  });
+
+
+  /* ------------------------------------------------------
+     Metadata
+  ------------------------------------------------------ */
+
+  analysis.push({
+
+    title:
+      "Metadata Analysis",
+
+    description:
+      metadata.hasMetadata
+
+        ? "Detectable metadata was found and may provide provenance context. Metadata is not treated as proof of authenticity."
+
+        : "No significant provenance metadata was detected. Missing metadata is common and is not treated as evidence that the image is fake.",
+  });
+
+
+  /* ------------------------------------------------------
+     AI Metadata
+  ------------------------------------------------------ */
+
+  if (
+    metadata.aiGenerator
+  ) {
+
+    analysis.push({
+
       title:
-        "File Integrity",
+        "AI Generation Metadata",
 
       description:
-        `The uploaded file passed binary signature validation as ${metadata.format.toUpperCase()} and its declared MIME type matched the detected format.`,
-    },
+        `The file contains an indicator associated with ${metadata.aiGenerator}. This is strong provenance evidence that the image may have been generated or processed using an AI image-generation system. Metadata can be modified or removed.`,
+    });
+  }
 
 
-    {
+  /* ------------------------------------------------------
+     Forensics
+  ------------------------------------------------------ */
+
+  analysis.push({
+
+    title:
+      "Forensic Analysis",
+
+    description:
+      `${signals.length} file, provenance, compression, and structural signals were evaluated. The forensic layer contributed a risk score of ${fusion.forensicRisk}/100.`,
+  });
+
+
+  /* ------------------------------------------------------
+     Evidence Quality
+  ------------------------------------------------------ */
+
+  analysis.push({
+
+    title:
+      "Evidence Quality",
+
+    description:
+      `TruthLens estimated the overall evidence quality at ${fusion.evidenceQuality}/100 using structural, provenance, forensic, and visual-analysis signals.`,
+  });
+
+
+  /* ------------------------------------------------------
+     Visual Findings
+  ------------------------------------------------------ */
+
+  if (
+    vision.findings.length > 0
+  ) {
+
+    analysis.push({
+
       title:
-        "Metadata & Provenance",
+        "Visual Findings",
 
       description:
-        metadata.hasMetadata
-          ? "Metadata markers were detected. These can provide provenance context, but metadata can be changed or removed."
-          : "No significant metadata markers were detected. This limits provenance analysis but does not indicate that the image is fake.",
-    },
+        vision.findings.join(
+          " "
+        ),
+    });
+  }
 
 
-    {
+  /* ------------------------------------------------------
+     Limitations
+  ------------------------------------------------------ */
+
+  if (
+    vision.limitations.length > 0
+  ) {
+
+    analysis.push({
+
       title:
-        "Editing Indicators",
+        "Analysis Limitations",
 
       description:
-        metadata.software ||
-        metadata.hasPhotoshopMetadata
-          ? "The file contains indicators associated with image-processing software. This may indicate editing or normal post-processing."
-          : "No recognizable editing-software metadata was detected.",
-    },
+        vision.limitations.join(
+          " "
+        ),
+    });
+  }
 
 
-    {
-      title:
-        "Compression Structure",
-
-      description:
-        metadata.format ===
-        "jpeg"
-          ? `JPEG structural analysis detected ${jpegStructure.quantizationTables} quantization table segment(s). These characteristics can result from normal encoding or subsequent processing.`
-          : "The uploaded format does not expose the same JPEG-specific structural indicators.",
-    },
-
-
-    {
-      title:
-        "Synthetic Media Indicators",
-
-      description:
-        aiIndicators.detected
-          ? `Potential synthetic-media markers were detected: ${aiIndicators.indicators.join(
-              ", "
-            )}. These markers are supporting evidence only.`
-          : "No recognizable synthetic-image metadata markers were detected.",
-    },
-
-
-    {
-      title:
-        "Overall Forensic Assessment",
-
-      description:
-        warningSignals.length >
-        0
-          ? `${warningSignals.length} warning indicator(s) were identified across ${new Set(
-              warningSignals.map(
-                (signal) =>
-                  signal.category
-              )
-            ).size} forensic category/categories.`
-          : "No strong forensic warning indicators were identified by the current analysis.",
-    },
-  ];
+  return analysis;
 };
 
 
-/* =========================================================
-   EVIDENCE
-========================================================= */
+/* ========================================================
+   BUILD EVIDENCE
+======================================================== */
 
 const buildEvidence = ({
   metadata,
+  properties,
   signals,
-  aiIndicators,
+  vision,
+  fusion,
 }) => {
+
   const evidence = [];
 
 
-  /* File format */
+  /* ------------------------------------------------------
+     Visual AI
+  ------------------------------------------------------ */
+
+  if (
+    vision.available
+  ) {
+
+    let type =
+      "context";
+
+
+    if (
+      (
+        vision.manipulationScore !== null &&
+        vision.manipulationScore >= 60
+      ) ||
+      (
+        vision.aiGeneratedScore !== null &&
+        vision.aiGeneratedScore >= 60
+      )
+    ) {
+
+      type =
+        "contradicting";
+
+    } else if (
+      vision.manipulationScore !== null &&
+      vision.manipulationScore < 40 &&
+      vision.confidence >= 50
+    ) {
+
+      type =
+        "supporting";
+    }
+
+
+    evidence.push({
+
+      type,
+
+      title:
+        "Visual AI Analysis",
+
+      domain:
+        "image-vision-analysis",
+
+      description:
+        `Visual analysis estimated manipulation risk at ${
+          vision.manipulationScore === null
+            ? "unknown"
+            : vision.manipulationScore
+        }/100 and AI-generation likelihood at ${
+          vision.aiGeneratedScore === null
+            ? "unknown"
+            : vision.aiGeneratedScore
+        }/100 with ${
+          Math.round(
+            vision.confidence
+          )
+        }% model confidence. Classification: ${
+          vision.classification
+        }. ${
+          vision.description
+        }`,
+
+      url:
+        "",
+    });
+
+
+    /*
+     * Separate AI generation evidence.
+     */
+
+    if (
+      vision.aiGeneratedScore !== null
+    ) {
+
+      evidence.push({
+
+        type:
+          vision.aiGeneratedScore >= 60
+            ? "contradicting"
+            : "context",
+
+        title:
+          "AI Generation Assessment",
+
+        domain:
+          "image-ai-analysis",
+
+        description:
+          `The visual model estimated the likelihood of AI generation at ${vision.aiGeneratedScore}/100. This is a model-based signal and is not treated as absolute proof.`,
+
+        url:
+          "",
+      });
+    }
+  }
+
+
+  /* ------------------------------------------------------
+     Image structure
+  ------------------------------------------------------ */
 
   evidence.push({
+
     type:
       "context",
 
     title:
-      "Binary Image Signature",
+      "Image Structure",
 
     domain:
       "local-file-analysis",
 
     description:
-      `The file signature identifies the image as ${metadata.format.toUpperCase()}.`,
+      `Valid ${metadata.format.toUpperCase()} image structure detected at ${
+        properties.width
+      } × ${
+        properties.height
+      } pixels.`,
 
     url:
       "",
   });
 
 
-  /* Metadata */
+  /* ------------------------------------------------------
+     Metadata
+  ------------------------------------------------------ */
+
+  evidence.push({
+
+    type:
+      "context",
+
+    title:
+      metadata.hasMetadata
+        ? "Metadata Available"
+        : "Metadata Not Available",
+
+    domain:
+      "image-provenance",
+
+    description:
+      metadata.hasMetadata
+
+        ? "Metadata was detected and may provide provenance context. It is not treated as proof of authenticity."
+
+        : "No significant provenance metadata was detected. Missing metadata is not proof of manipulation.",
+
+    url:
+      "",
+  });
+
+
+  /* ------------------------------------------------------
+     AI Generator
+  ------------------------------------------------------ */
 
   if (
-    metadata.hasMetadata
+    metadata.aiGenerator
   ) {
+
     evidence.push({
+
       type:
-        "context",
+        "contradicting",
 
       title:
-        "Metadata Detected",
+        "AI Generation Metadata",
 
       domain:
         "image-provenance",
 
       description:
-        "The image contains detectable metadata markers that can provide provenance context.",
-
-      url:
-        "",
-    });
-  } else {
-    evidence.push({
-      type:
-        "context",
-
-      title:
-        "Metadata Not Detected",
-
-      domain:
-        "image-provenance",
-
-      description:
-        "No significant metadata markers were detected. Metadata may have been removed during sharing, editing, downloading, or compression.",
+        `The file contains an indicator associated with ${metadata.aiGenerator}. This is a strong provenance signal that the image may have been generated or processed by an AI image-generation system.`,
 
       url:
         "",
@@ -1571,33 +2480,9 @@ const buildEvidence = ({
   }
 
 
-  /* AI indicators */
-
-  if (
-    aiIndicators.detected
-  ) {
-    evidence.push({
-      type:
-        "context",
-
-      title:
-        "Synthetic Media Indicator",
-
-      domain:
-        "synthetic-media-analysis",
-
-      description:
-        `Recognizable synthetic-media markers were detected: ${aiIndicators.indicators.join(
-          ", "
-        )}.`,
-
-      url:
-        "",
-    });
-  }
-
-
-  /* Warning signals */
+  /* ------------------------------------------------------
+     Forensic warnings
+  ------------------------------------------------------ */
 
   signals
     .filter(
@@ -1607,15 +2492,17 @@ const buildEvidence = ({
     )
     .forEach(
       (signal) => {
+
         evidence.push({
+
           type:
-            "context",
+            "contradicting",
 
           title:
             signal.name,
 
           domain:
-            signal.category,
+            `image-${signal.category}`,
 
           description:
             signal.description,
@@ -1627,38 +2514,108 @@ const buildEvidence = ({
     );
 
 
+  /* ------------------------------------------------------
+     Camera provenance
+  ------------------------------------------------------ */
+
+  if (
+    metadata.cameraMake
+  ) {
+
+    evidence.push({
+
+      type:
+        "context",
+
+      title:
+        "Camera Provenance",
+
+      domain:
+        "image-provenance",
+
+      description:
+        `Camera-related metadata associated with ${metadata.cameraMake} was detected.`,
+
+      url:
+        "",
+    });
+  }
+
+
+  /* ------------------------------------------------------
+     Fusion evidence
+  ------------------------------------------------------ */
+
+  evidence.push({
+
+    type:
+      "context",
+
+    title:
+      "Evidence Fusion",
+
+    domain:
+      "truthlens-fusion-engine",
+
+    description:
+      `TruthLens combined forensic risk (${fusion.forensicRisk}/100), visual risk (${
+        fusion.visualRisk === null
+          ? "unavailable"
+          : `${fusion.visualRisk}/100`
+      }), AI-generation risk (${
+        fusion.aiGenerationRisk === null
+          ? "unavailable"
+          : `${fusion.aiGenerationRisk}/100`
+      }), and evidence quality (${
+        fusion.evidenceQuality
+      }/100) to produce the final assessment.`,
+
+    url:
+      "",
+  });
+
+
   return evidence;
 };
 
 
-/* =========================================================
-   MAIN ANALYZER
-========================================================= */
+/* ========================================================
+   MAIN IMAGE ANALYSIS
+======================================================== */
 
 const analyzeImage = async ({
   buffer,
   mimetype,
   originalname,
+
+  /*
+   * Controller supplies Gemini Vision.
+   */
+  analyzeVision = null,
 }) => {
+
   const startTime =
     Date.now();
 
 
   console.log("");
+
   console.log(
-    "=========================================="
+    "========================================"
   );
+
   console.log(
-    "TruthLens Image Verification Engine"
+    "TruthLens Image Verification"
   );
+
   console.log(
-    "=========================================="
+    "========================================"
   );
 
 
-  /* -----------------------------------------
-     1. Validation
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     1. VALIDATE
+  ------------------------------------------------------ */
 
   validateImage({
     buffer,
@@ -1672,9 +2629,9 @@ const analyzeImage = async ({
   );
 
 
-  /* -----------------------------------------
-     2. Hash
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     2. HASH
+  ------------------------------------------------------ */
 
   const fileHash =
     generateFileHash(
@@ -1688,12 +2645,12 @@ const analyzeImage = async ({
   );
 
 
-  /* -----------------------------------------
-     3. Metadata
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     3. METADATA
+  ------------------------------------------------------ */
 
   const metadata =
-    extractMetadata({
+    await extractMetadata({
       buffer,
       mimetype,
       originalname,
@@ -1705,106 +2662,170 @@ const analyzeImage = async ({
     metadata.format
   );
 
+
   console.log(
     "[Image] Metadata:",
     metadata.hasMetadata
   );
 
 
-  /* -----------------------------------------
-     4. JPEG structure
-  ----------------------------------------- */
+  console.log(
+    "[Image] AI metadata:",
+    metadata.aiGenerator ||
+      "none"
+  );
 
-  const jpegStructure =
-    analyzeJpegStructure(
+
+  /* ------------------------------------------------------
+     4. IMAGE PROPERTIES
+  ------------------------------------------------------ */
+
+  const properties =
+    await extractImageProperties(
       buffer
     );
 
 
-  /* -----------------------------------------
-     5. Byte characteristics
-  ----------------------------------------- */
-
-  const byteCharacteristics =
-    analyzeByteCharacteristics(
-      buffer
-    );
+  console.log(
+    "[Image] Dimensions:",
+    properties.width,
+    "x",
+    properties.height
+  );
 
 
-  /* -----------------------------------------
-     6. AI markers
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     5. FORENSICS
+  ------------------------------------------------------ */
 
-  const aiIndicators =
-    analyzeAIGenerationIndicators({
-      metadata,
-      buffer,
-    });
-
-
-  /* -----------------------------------------
-     7. Forensic signals
-  ----------------------------------------- */
-
-  const signals =
+  const forensicSignals =
     analyzeForensicSignals({
       buffer,
       metadata,
-      jpegStructure,
-      byteCharacteristics,
-      aiIndicators,
+      properties,
     });
 
 
-  /* -----------------------------------------
-     8. Evidence fusion
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     6. GEMINI VISION
+  ------------------------------------------------------ */
 
-  const riskScore =
-    calculateRiskScore(
-      signals
+  let visionResult =
+    null;
+
+
+  if (
+    typeof analyzeVision ===
+    "function"
+  ) {
+
+    try {
+
+      console.log(
+        "[Image] Running Gemini Vision..."
+      );
+
+
+      visionResult =
+        await analyzeVision({
+          buffer,
+          mimetype,
+          originalname,
+        });
+
+
+      console.log(
+        "[Image] Gemini Vision completed."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "[Image] Gemini Vision failed:",
+        error.message
+      );
+    }
+
+  } else {
+
+    console.log(
+      "[Image] Gemini Vision function was not supplied."
+    );
+  }
+
+
+  const vision =
+    normalizeVisionResult(
+      visionResult
     );
 
 
-  /* -----------------------------------------
-     9. Verdict
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     7. FUSION
+  ------------------------------------------------------ */
 
-  const assessment =
-    determineVerdict({
-      riskScore,
-      signals,
+  const fusion =
+    calculateFusion({
+      forensicSignals,
+      vision,
     });
 
 
-  /* -----------------------------------------
-     10. Analysis
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     8. VERDICT
+  ------------------------------------------------------ */
+
+  const assessment =
+    determineVerdict({
+      riskScore:
+        fusion.riskScore,
+
+      confidence:
+        fusion.confidence,
+
+      vision,
+
+      forensicSignals,
+    });
+
+
+  /* ------------------------------------------------------
+     9. ANALYSIS
+  ------------------------------------------------------ */
 
   const analysis =
     buildAnalysis({
       metadata,
-      signals,
-      jpegStructure,
-      aiIndicators,
+      properties,
+
+      signals:
+        forensicSignals,
+
+      vision,
+      fusion,
     });
 
 
-  /* -----------------------------------------
-     11. Evidence
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     10. EVIDENCE
+  ------------------------------------------------------ */
 
   const evidence =
     buildEvidence({
       metadata,
-      signals,
-      aiIndicators,
+      properties,
+
+      signals:
+        forensicSignals,
+
+      vision,
+      fusion,
     });
 
 
-  /* -----------------------------------------
-     12. Processing time
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     11. PROCESSING TIME
+  ------------------------------------------------------ */
 
   const processingTime =
     `${(
@@ -1814,21 +2835,29 @@ const analyzeImage = async ({
     ).toFixed(2)} seconds`;
 
 
-  /* -----------------------------------------
-     13. Final result
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     12. FINAL RESULT
+  ------------------------------------------------------ */
 
   const result = {
+
     verdict:
       assessment.verdict,
 
-    confidence:
-      assessment.confidence,
+    label:
+      assessment.label,
 
-    riskScore,
+    confidence:
+      fusion.confidence,
+
+    riskScore:
+      fusion.riskScore,
 
     summary:
       assessment.summary,
+
+    recommendation:
+      assessment.recommendation,
 
     analysis,
 
@@ -1839,7 +2868,13 @@ const analyzeImage = async ({
 
     processingTime,
 
+
+    /* ----------------------------------------------------
+       FILE
+    ---------------------------------------------------- */
+
     file: {
+
       originalName:
         originalname || "",
 
@@ -1859,62 +2894,177 @@ const analyzeImage = async ({
         fileHash,
     },
 
+
+    /* ----------------------------------------------------
+       IMAGE PROPERTIES
+    ---------------------------------------------------- */
+
+    imageProperties:
+      properties,
+
+
+    /* ----------------------------------------------------
+       METADATA
+    ---------------------------------------------------- */
+
     metadata,
 
-    signals,
 
-    forensic: {
-      jpegStructure,
+    /* ----------------------------------------------------
+       FORENSIC SIGNALS
+    ---------------------------------------------------- */
 
-      byteCharacteristics,
+    signals:
+      forensicSignals,
 
-      aiIndicators,
+
+    /* ----------------------------------------------------
+       VISUAL ANALYSIS
+    ---------------------------------------------------- */
+
+    visualAnalysis: {
+
+      available:
+        vision.available,
+
+      classification:
+        vision.classification,
+
+      manipulationScore:
+        vision.manipulationScore,
+
+      aiGeneratedScore:
+        vision.aiGeneratedScore,
+
+      visualAuthenticityScore:
+        vision.visualAuthenticityScore,
+
+      confidence:
+        vision.confidence,
+
+      verdict:
+        vision.verdict,
+
+      findings:
+        vision.findings,
+
+      manipulationIndicators:
+        vision.manipulationIndicators,
+
+      authenticityIndicators:
+        vision.authenticityIndicators,
+
+      limitations:
+        vision.limitations,
+
+      evidenceQuality:
+        vision.evidenceQuality,
+    },
+
+
+    /* ----------------------------------------------------
+       FUSION
+    ---------------------------------------------------- */
+
+    fusion: {
+
+      forensicRisk:
+        fusion.forensicRisk,
+
+      visualRisk:
+        fusion.visualRisk,
+
+      manipulationRisk:
+        fusion.manipulationRisk,
+
+      aiGenerationRisk:
+        fusion.aiGenerationRisk,
+
+      evidenceQuality:
+        fusion.evidenceQuality,
+
+      independentSignals:
+        fusion.independentSignals,
+
+      classificationBoost:
+        fusion.classificationBoost,
+
+      hasAiMetadata:
+        fusion.hasAiMetadata,
     },
   };
 
 
-  /* -----------------------------------------
-     Logging
-  ----------------------------------------- */
+  /* ------------------------------------------------------
+     LOG RESULT
+  ------------------------------------------------------ */
 
   console.log("");
+
   console.log(
     "========== IMAGE RESULT =========="
   );
+
 
   console.log(
     "Verdict:",
     result.verdict
   );
 
+
   console.log(
     "Confidence:",
-    `${result.confidence}%`
+    result.confidence
   );
+
 
   console.log(
     "Risk:",
-    `${result.riskScore}/100`
+    result.riskScore
   );
 
-  console.log(
-    "Warning signals:",
-    signals.filter(
-      (signal) =>
-        signal.status ===
-        "warning"
-    ).length
-  );
 
   console.log(
-    "Evidence:",
-    evidence.length
+    "Visual manipulation:",
+    result.visualAnalysis.manipulationScore
   );
+
+
+  console.log(
+    "AI generation:",
+    result.visualAnalysis.aiGeneratedScore
+  );
+
+
+  console.log(
+    "Visual confidence:",
+    result.visualAnalysis.confidence
+  );
+
+
+  console.log(
+    "Forensic:",
+    result.fusion.forensicRisk
+  );
+
+
+  console.log(
+    "Evidence quality:",
+    result.fusion.evidenceQuality
+  );
+
+
+  console.log(
+    "Independent signals:",
+    result.fusion.independentSignals
+  );
+
 
   console.log(
     "Processing:",
     result.processingTime
   );
+
 
   console.log(
     "=================================="
@@ -1925,9 +3075,9 @@ const analyzeImage = async ({
 };
 
 
-/* =========================================================
+/* ========================================================
    EXPORT
-========================================================= */
+======================================================== */
 
 module.exports = {
   analyzeImage,

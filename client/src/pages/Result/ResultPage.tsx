@@ -32,24 +32,33 @@ import VerificationDetails from "./components/VerificationDetails";
 
 import "./Result.css";
 
+
 export default function ResultPage() {
 
   /*
-   * IMPORTANT:
+   * ========================================================
+   * VERIFICATION ID
+   * ========================================================
    *
-   * App.tsx uses:
+   * App.tsx:
    *
    * /result/:verificationId
    *
-   * Therefore we must read:
-   *
-   * verificationId
+   * Therefore we read verificationId from the URL.
    */
+
   const {
     verificationId,
   } = useParams<{
     verificationId: string;
   }>();
+
+
+  /*
+   * ========================================================
+   * STATE
+   * ========================================================
+   */
 
   const [
     verification,
@@ -71,9 +80,13 @@ export default function ResultPage() {
   ] =
     useState("");
 
+
   /*
-   * Fetch verification result.
+   * ========================================================
+   * FETCH VERIFICATION
+   * ========================================================
    */
+
   useEffect(() => {
 
     const fetchVerification =
@@ -92,10 +105,18 @@ export default function ResultPage() {
 
         try {
 
+          setLoading(true);
+          setError("");
+
           const result =
             await getVerification(
               verificationId
             );
+
+          console.log(
+            "TruthLens verification result:",
+            result
+          );
 
           setVerification(
             result
@@ -125,9 +146,13 @@ export default function ResultPage() {
 
   }, [verificationId]);
 
+
   /*
-   * Loading state
+   * ========================================================
+   * LOADING STATE
+   * ========================================================
    */
+
   if (loading) {
 
     return (
@@ -155,9 +180,13 @@ export default function ResultPage() {
     );
   }
 
+
   /*
-   * Error state
+   * ========================================================
+   * ERROR STATE
+   * ========================================================
    */
+
   if (
     error ||
     !verification
@@ -185,6 +214,7 @@ export default function ResultPage() {
             to="/verify"
             className="result-primary-action"
           >
+
             <ArrowLeft
               size={17}
             />
@@ -199,24 +229,147 @@ export default function ResultPage() {
     );
   }
 
+
   /*
-   * Evidence
+   * ========================================================
+   * SAFE DATA EXTRACTION
+   * ========================================================
    */
+
   const evidence =
     verification.evidence || [];
 
-  /*
-   * Analysis
-   */
   const analysis =
     verification.analysis || [];
+
+
+  /*
+   * ========================================================
+   * EVIDENCE QUALITY
+   * ========================================================
+   *
+   * The backend may return:
+   *
+   * verification.fusion.evidenceQuality
+   *
+   * or potentially:
+   *
+   * verification.evidenceQuality
+   *
+   * We use the real value when available.
+   *
+   * Otherwise we calculate a conservative fallback
+   * from the evidence count.
+   */
+
+  const verificationData =
+    verification as Verification & {
+      evidenceQuality?: number;
+
+      fusion?: {
+        evidenceQuality?: number;
+        forensicRisk?: number;
+        visualRisk?: number | null;
+        independentSignals?: number;
+      };
+
+      visualAnalysis?: {
+        available?: boolean;
+        manipulationScore?: number | null;
+        confidence?: number;
+        verdict?: string;
+        findings?: string[];
+        evidenceQuality?: number;
+      };
+
+      riskScore?: number;
+    };
+
+
+  const backendEvidenceQuality =
+    verificationData.fusion
+      ?.evidenceQuality ??
+    verificationData.evidenceQuality ??
+    verificationData.visualAnalysis
+      ?.evidenceQuality;
+
+
+  const evidenceQuality =
+    typeof backendEvidenceQuality ===
+      "number"
+      ? Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              backendEvidenceQuality
+            )
+          )
+        )
+      : evidence.length > 0
+      ? Math.min(
+          100,
+          evidence.length * 10
+        )
+      : 0;
+
+
+  /*
+   * ========================================================
+   * EVIDENCE STRENGTH LABEL
+   * ========================================================
+   */
+
+  const getEvidenceStrength =
+    (
+      quality: number
+    ) => {
+
+      if (quality >= 70) {
+        return "Strong";
+      }
+
+      if (quality >= 45) {
+        return "Moderate";
+      }
+
+      if (quality > 0) {
+        return "Limited";
+      }
+
+      return "Unavailable";
+    };
+
+
+  const evidenceStrength =
+    getEvidenceStrength(
+      evidenceQuality
+    );
+
+
+  /*
+   * ========================================================
+   * SOURCE COUNT
+   * ========================================================
+   */
+
+  const sourcesAnalyzed =
+    verification.sourcesAnalyzed ??
+    evidence.length;
+
+
+  /*
+   * ========================================================
+   * RENDER
+   * ========================================================
+   */
 
   return (
     <div className="result-page">
 
-      {/* =========================
+      {/* =====================================================
           NAVIGATION
-      ========================== */}
+      ====================================================== */}
 
       <header className="result-nav">
 
@@ -237,6 +390,7 @@ export default function ResultPage() {
 
           </Link>
 
+
           <nav className="result-nav-links">
 
             <Link to="/dashboard">
@@ -249,6 +403,7 @@ export default function ResultPage() {
 
           </nav>
 
+
           <Link
             to="/verify"
             className="result-nav-button"
@@ -260,13 +415,18 @@ export default function ResultPage() {
 
       </header>
 
-      {/* =========================
+
+      {/* =====================================================
           MAIN
-      ========================== */}
+      ====================================================== */}
 
       <main className="result-main">
 
-        {/* Back */}
+
+        {/* ===================================================
+            BACK
+        ==================================================== */}
+
         <motion.div
           className="result-back"
           initial={{
@@ -294,7 +454,11 @@ export default function ResultPage() {
 
         </motion.div>
 
-        {/* Header */}
+
+        {/* ===================================================
+            HEADER
+        ==================================================== */}
+
         <motion.section
           className="result-header"
           initial={{
@@ -314,15 +478,18 @@ export default function ResultPage() {
             VERIFICATION RESULT
           </span>
 
+
           <h1>
             Verification Analysis
           </h1>
+
 
           <p>
             TruthLens analyzed the submitted
             content against available evidence
             and source signals.
           </p>
+
 
           <div className="result-completed">
 
@@ -336,9 +503,10 @@ export default function ResultPage() {
 
         </motion.section>
 
-        {/* =========================
+
+        {/* ===================================================
             VERDICT
-        ========================== */}
+        ==================================================== */}
 
         <motion.section
           className="result-verdict-layout"
@@ -365,6 +533,7 @@ export default function ResultPage() {
             }
           />
 
+
           <ConfidenceScore
             confidence={
               verification.confidence
@@ -373,9 +542,10 @@ export default function ResultPage() {
 
         </motion.section>
 
-        {/* =========================
+
+        {/* ===================================================
             SECTION 01
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-section">
 
@@ -384,6 +554,7 @@ export default function ResultPage() {
             <span>
               01
             </span>
+
 
             <div>
 
@@ -401,15 +572,17 @@ export default function ResultPage() {
 
           </div>
 
+
           <AnalysisSummary
             items={analysis}
           />
 
         </section>
 
-        {/* =========================
+
+        {/* ===================================================
             SECTION 02
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-section">
 
@@ -418,6 +591,7 @@ export default function ResultPage() {
             <span>
               02
             </span>
+
 
             <div>
 
@@ -435,6 +609,11 @@ export default function ResultPage() {
 
           </div>
 
+
+          {/* =================================================
+              EVIDENCE STRENGTH
+          ================================================== */}
+
           <div className="evidence-strength">
 
             <div>
@@ -443,38 +622,42 @@ export default function ResultPage() {
                 Evidence Strength
               </span>
 
+
               <strong>
-                {evidence.length > 0
-                  ? "Available"
-                  : "Pending"}
+                {evidenceStrength}
               </strong>
 
             </div>
+
 
             <div className="strength-bar">
 
               <span
                 style={{
                   width:
-                    evidence.length > 0
-                      ? "75%"
-                      : "15%",
+                    `${evidenceQuality}%`,
                 }}
               />
 
             </div>
 
+
             <div className="evidence-count">
 
-              {verification.sourcesAnalyzed ||
-                evidence.length}
+              {sourcesAnalyzed}
 
               {" "}
+
               relevant sources analyzed
 
             </div>
 
           </div>
+
+
+          {/* =================================================
+              EVIDENCE LIST
+          ================================================== */}
 
           {evidence.length > 0 ? (
 
@@ -510,9 +693,10 @@ export default function ResultPage() {
 
         </section>
 
-        {/* =========================
+
+        {/* ===================================================
             SECTION 03
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-section">
 
@@ -521,6 +705,7 @@ export default function ResultPage() {
             <span>
               03
             </span>
+
 
             <div>
 
@@ -537,6 +722,7 @@ export default function ResultPage() {
 
           </div>
 
+
           <SubmittedContent
             content={
               verification.content
@@ -545,9 +731,10 @@ export default function ResultPage() {
 
         </section>
 
-        {/* =========================
+
+        {/* ===================================================
             SECTION 04
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-section">
 
@@ -556,6 +743,7 @@ export default function ResultPage() {
             <span>
               04
             </span>
+
 
             <div>
 
@@ -572,18 +760,21 @@ export default function ResultPage() {
 
           </div>
 
+
           <VerificationDetails
             type={
               verification.type
             }
+
             sources={
-              verification.sourcesAnalyzed ||
-              evidence.length
+              sourcesAnalyzed
             }
+
             processingTime={
               verification.processingTime ||
               "N/A"
             }
+
             verificationId={
               verification.verificationId
             }
@@ -591,9 +782,10 @@ export default function ResultPage() {
 
         </section>
 
-        {/* =========================
+
+        {/* ===================================================
             DISCLAIMER
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-disclaimer">
 
@@ -601,11 +793,13 @@ export default function ResultPage() {
             size={18}
           />
 
+
           <div>
 
             <strong>
               Evidence-based, not absolute.
             </strong>
+
 
             <p>
               TruthLens evaluates available
@@ -619,9 +813,10 @@ export default function ResultPage() {
 
         </section>
 
-        {/* =========================
+
+        {/* ===================================================
             ACTIONS
-        ========================== */}
+        ==================================================== */}
 
         <section className="result-actions">
 
@@ -638,20 +833,24 @@ export default function ResultPage() {
 
           </Link>
 
+
           <Link
             to="/dashboard"
             className="result-secondary-action"
           >
+
             Back to Dashboard
+
           </Link>
 
         </section>
 
       </main>
 
-      {/* =========================
+
+      {/* =====================================================
           FOOTER
-      ========================== */}
+      ====================================================== */}
 
       <footer className="result-footer">
 
@@ -659,6 +858,7 @@ export default function ResultPage() {
           TruthLens — Digital trust &
           evidence verification
         </span>
+
 
         <div>
 
