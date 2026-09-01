@@ -5,25 +5,24 @@ const {
   getVerification,
 } = require("../controllers/verificationController");
 
+const upload = require("../middleware/uploadMiddleware");
+
 const router = express.Router();
 
-/*
- * Create a new verification.
- *
- * POST:
- * /api/verifications
- */
+/* =========================================================
+   CREATE VERIFICATION
+========================================================= */
+
 router.post(
   "/",
+  upload.single("file"),
   createVerification
 );
 
-/*
- * Get an existing verification.
- *
- * GET:
- * /api/verifications/:verificationId
- */
+/* =========================================================
+   GET VERIFICATION
+========================================================= */
+
 router.get(
   "/:verificationId",
   getVerification
