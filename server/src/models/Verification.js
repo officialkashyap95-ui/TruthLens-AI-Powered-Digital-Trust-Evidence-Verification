@@ -1,6 +1,4 @@
-const mongoose =
-  require("mongoose");
-
+const mongoose = require("mongoose");
 
 /* =========================================================
    EVIDENCE SCHEMA
@@ -9,7 +7,6 @@ const mongoose =
 const evidenceSchema =
   new mongoose.Schema(
     {
-
       type: {
         type: String,
 
@@ -41,14 +38,11 @@ const evidenceSchema =
         type: String,
         default: "",
       },
-
     },
-
     {
       _id: false,
     }
   );
-
 
 /* =========================================================
    ANALYSIS SCHEMA
@@ -57,7 +51,6 @@ const evidenceSchema =
 const analysisSchema =
   new mongoose.Schema(
     {
-
       title: {
         type: String,
         required: true,
@@ -67,14 +60,127 @@ const analysisSchema =
         type: String,
         required: true,
       },
-
     },
-
     {
       _id: false,
     }
   );
 
+/* =========================================================
+   SIGNAL SCHEMA
+========================================================= */
+
+const signalSchema =
+  new mongoose.Schema(
+    {
+      name: {
+        type: String,
+        required: true,
+      },
+
+      score: {
+        type: Number,
+        default: 0,
+      },
+
+      status: {
+        type: String,
+
+        enum: [
+          "normal",
+          "warning",
+          "info",
+        ],
+
+        default: "info",
+      },
+
+      description: {
+        type: String,
+        required: true,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+/* =========================================================
+   IMAGE METADATA SCHEMA
+========================================================= */
+
+const metadataSchema =
+  new mongoose.Schema(
+    {
+      filename: {
+        type: String,
+        default: "",
+      },
+
+      mimeType: {
+        type: String,
+        default: "",
+      },
+
+      format: {
+        type: String,
+        default: "",
+      },
+
+      sizeBytes: {
+        type: Number,
+        default: 0,
+      },
+
+      sizeMB: {
+        type: Number,
+        default: 0,
+      },
+
+      hasMetadata: {
+        type: Boolean,
+        default: false,
+      },
+
+      hasExif: {
+        type: Boolean,
+        default: false,
+      },
+
+      hasJfif: {
+        type: Boolean,
+        default: false,
+      },
+
+      hasIccProfile: {
+        type: Boolean,
+        default: false,
+      },
+
+      hasPhotoshopMetadata: {
+        type: Boolean,
+        default: false,
+      },
+
+      hasXmp: {
+        type: Boolean,
+        default: false,
+      },
+
+      cameraMake: {
+        type: String,
+        default: "",
+      },
+
+      cameraModel: {
+        type: String,
+        default: "",
+      },
+    },
+    {
+      _id: false,
+    }
+  );
 
 /* =========================================================
    VERIFICATION SCHEMA
@@ -82,9 +188,7 @@ const analysisSchema =
 
 const verificationSchema =
   new mongoose.Schema(
-
     {
-
       userId: {
         type: String,
         required: true,
@@ -114,6 +218,10 @@ const verificationSchema =
         default: "",
       },
 
+      /* =====================================================
+         RESULT
+      ===================================================== */
+
       verdict: {
         type: String,
         default: "Pending",
@@ -121,8 +229,21 @@ const verificationSchema =
 
       confidence: {
         type: Number,
+
         default: 0,
+
         min: 0,
+
+        max: 100,
+      },
+
+      riskScore: {
+        type: Number,
+
+        default: 0,
+
+        min: 0,
+
         max: 100,
       },
 
@@ -151,20 +272,65 @@ const verificationSchema =
         default: "",
       },
 
-      verificationId: {
+      /* =====================================================
+         IMAGE INFORMATION
+      ===================================================== */
+
+      fileHash: {
         type: String,
-        unique: true,
-        index: true,
+        default: "",
       },
 
-    },
+      fileName: {
+        type: String,
+        default: "",
+      },
 
+      mimeType: {
+        type: String,
+        default: "",
+      },
+
+      fileSize: {
+        type: Number,
+        default: 0,
+      },
+
+      imageFormat: {
+        type: String,
+        default: "",
+      },
+
+      metadata: {
+        type: metadataSchema,
+        default: undefined,
+      },
+
+      signals: {
+        type: [signalSchema],
+        default: [],
+      },
+
+      /* =====================================================
+         VERIFICATION ID
+      ===================================================== */
+
+      verificationId: {
+        type: String,
+
+        unique: true,
+
+        index: true,
+      },
+    },
     {
       timestamps: true,
     }
-
   );
 
+/* =========================================================
+   EXPORT
+========================================================= */
 
 module.exports =
   mongoose.model(
