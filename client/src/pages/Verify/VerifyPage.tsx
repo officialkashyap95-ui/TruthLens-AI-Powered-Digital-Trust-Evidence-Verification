@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, ShieldCheck, X } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowRight,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import {
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 
 import VerificationTabs, {
   type VerificationType,
@@ -12,28 +19,41 @@ import FileUploader from "../../components/verification/FileUploader";
 import AnalysisProgress from "../../components/verification/AnalysisProgress";
 import VerificationInfo from "../../components/verification/VerificationInfo";
 
-import "./Verify.css";
+import {
+  createVerification,
+} from "../../services/verificationService";
 
-const API_URL = "http://localhost:5001";
+import "./Verify.css";
 
 export default function VerifyPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+
+  const [searchParams] =
+    useSearchParams();
 
   const [type, setType] =
     useState<VerificationType>("text");
 
-  const [text, setText] = useState("");
-  const [source, setSource] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [text, setText] =
+    useState("");
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [source, setSource] =
+    useState("");
+
+  const [file, setFile] =
+    useState<File | null>(null);
+
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
 
   /*
    * Read verification type from URL.
    *
-   * Example:
+   * Examples:
+   *
    * /verify?type=text
    * /verify?type=image
    * /verify?type=video
@@ -41,11 +61,18 @@ export default function VerifyPage() {
    */
   useEffect(() => {
     const queryType =
-      searchParams.get("type") as VerificationType | null;
+      searchParams.get("type") as
+        | VerificationType
+        | null;
 
     if (
       queryType &&
-      ["text", "image", "video", "document"].includes(queryType)
+      [
+        "text",
+        "image",
+        "video",
+        "document",
+      ].includes(queryType)
     ) {
       setType(queryType);
     }
@@ -72,31 +99,43 @@ export default function VerifyPage() {
     /*
      * TEXT VALIDATION
      */
-    if (type === "text" && !text.trim()) {
+    if (
+      type === "text" &&
+      !text.trim()
+    ) {
       setError(
         "Enter content before starting the analysis."
       );
+
       return;
     }
 
     /*
      * FILE VALIDATION
      */
-    if (type !== "text" && !file) {
+    if (
+      type !== "text" &&
+      !file
+    ) {
       setError(
         `Select a ${type} before starting the analysis.`
       );
+
       return;
     }
 
     /*
-     * Currently our backend is connected for TEXT
-     * verification only.
+     * Only text is connected
+     * to the backend currently.
      */
     if (type !== "text") {
       setError(
-        `${type.charAt(0).toUpperCase() + type.slice(1)} verification is coming soon.`
+        `${
+          type.charAt(0).toUpperCase() +
+          type.slice(1)
+        } verification is coming soon.`
       );
+
       return;
     }
 
@@ -104,61 +143,41 @@ export default function VerifyPage() {
 
     try {
       /*
-       * Send text verification to backend.
+       * Call backend through the
+       * central verification service.
        */
-      const response = await fetch(
-        `${API_URL}/api/verifications`,
-        {
-          method: "POST",
+      const result =
+        await createVerification({
+          type: "text",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+          content:
+            text.trim(),
 
-          body: JSON.stringify({
-            type: "text",
-            content: text.trim(),
-
-            /*
-             * Send source as well.
-             *
-             * Your backend can ignore this for now
-             * if it doesn't use it yet.
-             */
-            source: source.trim(),
-          }),
-        }
-      );
+          source:
+            source.trim(),
+        });
 
       /*
-       * Try to parse backend response.
+       * Make sure backend returned
+       * verification data.
        */
-      const data = await response.json();
-
-      /*
-       * Backend returned an error.
-       */
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message ||
-            "Verification failed. Please try again."
-        );
-      }
-
-      /*
-       * Make sure backend returned verification data.
-       */
-      if (!data.verification) {
+      if (
+        !result.verification
+      ) {
         throw new Error(
           "Verification was created but no result was returned."
         );
       }
 
       /*
-       * Get the verification ID generated by MongoDB/backend.
+       * Backend-generated ID.
+       *
+       * Example:
+       * TL-2026-4321
        */
       const verificationId =
-        data.verification.verificationId;
+        result.verification
+          .verificationId;
 
       if (!verificationId) {
         throw new Error(
@@ -167,14 +186,11 @@ export default function VerifyPage() {
       }
 
       /*
-       * Navigate to:
-       *
-       * /result/TL-2026-XXXX
-       *
-       * ResultPage will use this ID to fetch
-       * the actual verification.
+       * Go directly to result page.
        */
-      navigate(`/result/${verificationId}`);
+      navigate(
+        `/result/${verificationId}`
+      );
 
     } catch (err) {
       console.error(
@@ -256,14 +272,13 @@ export default function VerifyPage() {
 
       </header>
 
-
       {/* =========================
           MAIN
       ========================== */}
 
       <main className="verify-main">
 
-        {/* Page heading */}
+        {/* Heading */}
         <motion.div
           className="verify-heading"
           initial={{
@@ -288,16 +303,16 @@ export default function VerifyPage() {
           </h1>
 
           <p>
-            Analyze claims, images, videos, and
-            documents using multiple evidence signals
-            to assess their credibility and authenticity.
+            Analyze claims, images, videos,
+            and documents using multiple
+            evidence signals to assess
+            their credibility and authenticity.
           </p>
 
         </motion.div>
 
-
         {/* =========================
-            VERIFICATION WORKSPACE
+            WORKSPACE
         ========================== */}
 
         <section
@@ -305,19 +320,16 @@ export default function VerifyPage() {
           aria-label="Verification workspace"
         >
 
-          {/* Verification tabs */}
           <VerificationTabs
             selected={type}
-            onChange={handleTypeChange}
+            onChange={
+              handleTypeChange
+            }
           />
-
 
           <AnimatePresence mode="wait">
 
-            {/* =====================
-                ANALYSIS LOADING
-            ====================== */}
-
+            {/* Loading */}
             {loading ? (
 
               <AnalysisProgress
@@ -351,7 +363,7 @@ export default function VerifyPage() {
               >
 
                 {/* =====================
-                    TEXT VERIFICATION
+                    TEXT
                 ====================== */}
 
                 {type === "text" ? (
@@ -359,14 +371,18 @@ export default function VerifyPage() {
                   <TextVerifier
                     text={text}
                     source={source}
-                    onTextChange={setText}
-                    onSourceChange={setSource}
+                    onTextChange={
+                      setText
+                    }
+                    onSourceChange={
+                      setSource
+                    }
                   />
 
                 ) : (
 
                   /* =====================
-                     FILE VERIFICATION
+                     FILE
                   ====================== */
 
                   <div className="file-area">
@@ -376,7 +392,9 @@ export default function VerifyPage() {
                       <div className="file-selected">
 
                         <div className="file-symbol">
-                          <ShieldCheck size={22} />
+                          <ShieldCheck
+                            size={22}
+                          />
                         </div>
 
                         <div>
@@ -417,7 +435,9 @@ export default function VerifyPage() {
                       <FileUploader
                         type={type}
                         file={file}
-                        onFileChange={setFile}
+                        onFileChange={
+                          setFile
+                        }
                       />
 
                     )}
@@ -426,11 +446,7 @@ export default function VerifyPage() {
 
                 )}
 
-
-                {/* =====================
-                    ERROR
-                ====================== */}
-
+                {/* Error */}
                 {error && (
 
                   <p
@@ -442,11 +458,7 @@ export default function VerifyPage() {
 
                 )}
 
-
-                {/* =====================
-                    ANALYZE BUTTON
-                ====================== */}
-
+                {/* Analyze */}
                 <button
                   type="button"
                   className="analyze-button"
@@ -455,15 +467,21 @@ export default function VerifyPage() {
                       ? !text.trim()
                       : !file
                   }
-                  onClick={handleSubmit}
+                  onClick={
+                    handleSubmit
+                  }
                 >
 
                   Analyze{" "}
 
-                  {type.charAt(0).toUpperCase() +
+                  {type
+                    .charAt(0)
+                    .toUpperCase() +
                     type.slice(1)}
 
-                  <ArrowRight size={16} />
+                  <ArrowRight
+                    size={16}
+                  />
 
                 </button>
 
@@ -474,11 +492,6 @@ export default function VerifyPage() {
           </AnimatePresence>
 
         </section>
-
-
-        {/* =========================
-            INFORMATION
-        ========================== */}
 
         <VerificationInfo />
 
