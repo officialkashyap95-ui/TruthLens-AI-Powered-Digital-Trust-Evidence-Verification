@@ -12,4 +12,5 @@ const startServer = async () => {
     console.log(`TruthLens server running on port ${PORT}`);
   });
 };
+
 startServer();
