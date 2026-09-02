@@ -333,7 +333,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 Start the backend:
 
 ```bash
-npm start
+node server.js
 ```
 
 Development mode:
