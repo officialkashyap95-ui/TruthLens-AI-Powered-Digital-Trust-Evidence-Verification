@@ -733,9 +733,9 @@ Do not claim an open-source license unless the repository actually includes that
 
 ## Links
 
-- **GitHub:** `<YOUR_GITHUB_REPOSITORY_URL>`
-- **Live Demo:** `<YOUR_DEPLOYED_FRONTEND_URL>`
-- **Backend API:** `<YOUR_DEPLOYED_BACKEND_URL>`
+- **GitHub:** `https://github.com/officialkashyap95-ui/TruthLens-AI-Powered-Digital-Trust-Evidence-Verification`
+
+- **Live Demo:** `https://truth-lens-ai-powered-digital-trust.vercel.app/`
 
 ---
 
