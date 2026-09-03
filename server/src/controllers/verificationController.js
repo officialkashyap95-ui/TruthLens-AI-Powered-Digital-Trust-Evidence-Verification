@@ -9,6 +9,7 @@ const {
   analyzeImage,
 } = require("../services/image/imageVerificationService");
 
+
 /* =========================================================
    CREATE VERIFICATION
 ========================================================= */
@@ -18,11 +19,13 @@ const createVerification = async (
   res
 ) => {
   try {
+
     const {
       type,
       content,
       source,
     } = req.body;
+
 
     /* =====================================================
        BASIC TYPE VALIDATION
@@ -36,15 +39,12 @@ const createVerification = async (
       });
     }
 
+
     /* =====================================================
        IMAGE VERIFICATION
     ===================================================== */
 
     if (type === "image") {
-      /*
-       * Multer should place the uploaded
-       * image inside req.file.
-       */
 
       if (!req.file) {
         return res.status(400).json({
@@ -53,6 +53,7 @@ const createVerification = async (
             "Please upload an image.",
         });
       }
+
 
       console.log("");
       console.log(
@@ -79,9 +80,10 @@ const createVerification = async (
         "MB"
       );
 
-      /*
-       * Analyze uploaded image.
-       */
+
+      /* ===================================================
+         ANALYZE IMAGE
+      =================================================== */
 
       const analysis =
         await analyzeImage({
@@ -95,21 +97,20 @@ const createVerification = async (
             req.file.originalname,
         });
 
-      /*
-       * Save verification.
-       *
-       * content is required by the current
-       * MongoDB schema, so we store the
-       * filename for image verification.
-       */
+
+      /* ===================================================
+         SAVE IMAGE VERIFICATION
+      =================================================== */
 
       const verification =
         await Verification.create({
+
           userId:
             req.userId ||
             "development-user",
 
-          type: "image",
+          type:
+            "image",
 
           content:
             req.file.originalname,
@@ -143,65 +144,81 @@ const createVerification = async (
           verificationId:
             generateVerificationId(),
 
-          /*
-           * Image-specific fields.
-           */
-
           riskScore:
             analysis.riskScore,
 
           fileHash:
-            analysis.file.sha256,
+            analysis.file?.sha256,
 
           fileName:
-            analysis.file.originalName,
+            analysis.file?.originalName,
 
           mimeType:
-            analysis.file.mimeType,
+            analysis.file?.mimeType,
 
           fileSize:
-            analysis.file.sizeBytes,
+            analysis.file?.sizeBytes,
 
           imageFormat:
-            analysis.file.format,
+            analysis.file?.format,
+
+          file:
+            analysis.file,
 
           metadata:
             analysis.metadata,
 
           signals:
             analysis.signals,
+
+          visualAnalysis:
+            analysis.visualAnalysis,
+
+          fusion:
+            analysis.fusion,
         });
+
 
       console.log(
         "Image verification saved:",
         verification.verificationId
       );
 
+
       return res.status(201).json({
+
         success: true,
 
         message:
           "Image verification created successfully.",
 
         verification,
+
       });
     }
+
 
     /* =====================================================
        TEXT VERIFICATION
     ===================================================== */
 
     if (type === "text") {
+
       if (
         !content ||
         !content.trim()
       ) {
+
         return res.status(400).json({
+
           success: false,
+
           message:
             "Text content is required.",
+
         });
       }
+
 
       console.log("");
       console.log(
@@ -216,33 +233,41 @@ const createVerification = async (
       console.log(
         "Source:",
         source ||
-          "No source provided"
+        "No source provided"
       );
 
-      /*
-       * Run existing text verification engine.
-       */
+
+      /* ===================================================
+         ANALYZE TEXT
+      =================================================== */
 
       const analysis =
         await analyzeContent({
+
           type,
+
           content:
             content.trim(),
+
           source:
             source || "",
+
         });
 
-      /*
-       * Save result.
-       */
+
+      /* ===================================================
+         SAVE TEXT VERIFICATION
+      =================================================== */
 
       const verification =
         await Verification.create({
+
           userId:
             req.userId ||
             "development-user",
 
-          type: "text",
+          type:
+            "text",
 
           content:
             content.trim(),
@@ -274,131 +299,273 @@ const createVerification = async (
             "",
 
           verificationId:
-            analysis.verificationId,
+            analysis.verificationId ||
+            generateVerificationId(),
+
         });
+
 
       console.log(
         "Text verification saved:",
         verification.verificationId
       );
 
+
       return res.status(201).json({
+
         success: true,
 
         message:
           "Text verification created successfully.",
 
         verification,
+
       });
     }
+
 
     /* =====================================================
        OTHER TYPES
     ===================================================== */
 
     return res.status(400).json({
+
       success: false,
 
       message:
         "Video and document verification are not implemented yet.",
-    });
-  } catch (error) {
-    console.error("");
 
+    });
+
+  } catch (error) {
+
+    console.error("");
     console.error(
       "Verification creation error:"
     );
 
     console.error(error);
 
+
     return res.status(500).json({
+
       success: false,
 
       message:
         error.message ||
         "Failed to create verification.",
+
     });
   }
 };
 
+
 /* =========================================================
-   GET VERIFICATION
+   GET SINGLE VERIFICATION
 ========================================================= */
 
 const getVerification = async (
   req,
   res
 ) => {
+
   try {
+
     const {
       verificationId,
     } = req.params;
 
+
     if (!verificationId) {
+
       return res.status(400).json({
+
         success: false,
 
         message:
           "Verification ID is required.",
+
       });
     }
 
+
+    /* ===================================================
+       FIND VERIFICATION
+    =================================================== */
+
     const verification =
       await Verification.findOne({
+
         verificationId,
+
       }).lean();
 
+
     if (!verification) {
+
       return res.status(404).json({
+
         success: false,
 
         message:
           "Verification not found.",
+
       });
     }
 
+
     return res.status(200).json({
+
       success: true,
 
       message:
         "Verification retrieved successfully.",
 
       verification,
+
     });
+
   } catch (error) {
+
     console.error(
       "Get verification error:"
     );
 
     console.error(error);
 
+
     return res.status(500).json({
+
       success: false,
 
       message:
         error.message ||
         "Failed to retrieve verification.",
+
     });
   }
 };
 
+
 /* =========================================================
-   VERIFICATION ID
+   GET VERIFICATION HISTORY
+========================================================= */
+
+const getVerificationHistory = async (
+  req,
+  res
+) => {
+
+  try {
+
+    /*
+     * For now the project uses:
+     *
+     * req.userId
+     *
+     * If authentication middleware provides
+     * the Clerk user ID, that ID will be used.
+     *
+     * During development, we fall back to:
+     *
+     * development-user
+     */
+
+    const userId =
+      req.userId ||
+      "development-user";
+
+
+    console.log("");
+    console.log(
+      "Loading verification history..."
+    );
+
+    console.log(
+      "User ID:",
+      userId
+    );
+
+
+    /* ===================================================
+       GET USER VERIFICATIONS
+    =================================================== */
+
+    const verifications =
+      await Verification.find({
+
+        userId,
+
+      })
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+
+    console.log(
+      "History records found:",
+      verifications.length
+    );
+
+
+    return res.status(200).json({
+
+      success: true,
+
+      message:
+        "Verification history retrieved successfully.",
+
+      count:
+        verifications.length,
+
+      verifications,
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get verification history error:"
+    );
+
+    console.error(error);
+
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message ||
+        "Failed to retrieve verification history.",
+
+    });
+  }
+};
+
+
+/* =========================================================
+   GENERATE VERIFICATION ID
 ========================================================= */
 
 const generateVerificationId = () => {
+
   const year =
     new Date().getFullYear();
+
 
   const randomNumber =
     Math.floor(
       1000 +
-        Math.random() *
-          9000
+      Math.random() *
+      9000
     );
+
 
   return `TL-${year}-${randomNumber}`;
 };
+
 
 /* =========================================================
    EXPORT
@@ -407,4 +574,5 @@ const generateVerificationId = () => {
 module.exports = {
   createVerification,
   getVerification,
+  getVerificationHistory,
 };

@@ -357,6 +357,17 @@ export interface VerificationResponse {
   data?: Verification;
 }
 
+/* =========================================================
+   VERIFICATION HISTORY RESPONSE
+========================================================= */
+
+export interface VerificationHistoryResponse {
+  success: boolean;
+  message: string;
+  count: number;
+  verifications: Verification[];
+}
+
 
 /* =========================================================
    API URL
@@ -907,3 +918,59 @@ export const getVerification = async (
     throw error;
   }
 };
+/* =========================================================
+   GET VERIFICATION HISTORY
+========================================================= */
+
+export interface VerificationHistoryResponse {
+  success: boolean;
+  message: string;
+  count: number;
+  verifications: Verification[];
+}
+
+export const getVerificationHistory =
+  async (): Promise<Verification[]> => {
+    try {
+      console.log(
+        "[TruthLens] Loading verification history..."
+      );
+
+      const response = await fetch(
+        `${API_URL}/api/verifications/history`
+      );
+
+      const result =
+        (await parseJsonResponse(
+          response
+        )) as VerificationHistoryResponse | null;
+
+      if (!response.ok || !result?.success) {
+        throw new Error(
+          result?.message ||
+            `Failed to load verification history (${response.status}).`
+        );
+      }
+
+      const verifications =
+        Array.isArray(result.verifications)
+          ? result.verifications
+          : [];
+
+      console.log(
+        "[TruthLens] History records:",
+        verifications.length
+      );
+
+      return verifications.map(
+        normalizeVerification
+      );
+    } catch (error) {
+      console.error(
+        "[TruthLens] Get verification history error:",
+        error
+      );
+
+      throw error;
+    }
+  };
