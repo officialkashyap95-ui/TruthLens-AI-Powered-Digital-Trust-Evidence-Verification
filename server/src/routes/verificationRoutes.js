@@ -3,6 +3,7 @@ const express = require("express");
 const {
   createVerification,
   getVerification,
+  getVerificationHistory,
 } = require("../controllers/verificationController");
 
 const upload = require("../middleware/uploadMiddleware");
@@ -20,7 +21,18 @@ router.post(
 );
 
 /* =========================================================
-   GET VERIFICATION
+   GET VERIFICATION HISTORY
+   IMPORTANT:
+   This MUST come before /:verificationId
+========================================================= */
+
+router.get(
+  "/history",
+  getVerificationHistory
+);
+
+/* =========================================================
+   GET SINGLE VERIFICATION
 ========================================================= */
 
 router.get(

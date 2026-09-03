@@ -3,10 +3,13 @@ import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserButton } from "@clerk/react";
 
+interface DashboardNavbarProps {
+  onHistoryClick: () => void;
+}
+
 const navItems = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Verify Content", href: "/verify", primary: true },
-  { label: "History", href: "/history" },
   { label: "Settings", href: "/settings" },
 ];
 
@@ -26,13 +29,24 @@ function Brand() {
   );
 }
 
-export default function DashboardNavbar() {
+export default function DashboardNavbar({
+  onHistoryClick,
+}: DashboardNavbarProps) {
   const [open, setOpen] = useState(false);
+
+  const handleHistoryClick = () => {
+    setOpen(false);
+    onHistoryClick();
+  };
 
   return (
     <header className="top-nav">
       <div className="top-nav-inner">
         <Brand />
+
+        {/* =====================================================
+            DESKTOP NAVIGATION
+        ===================================================== */}
 
         <nav
           className="desktop-nav"
@@ -42,17 +56,32 @@ export default function DashboardNavbar() {
             <a
               key={item.label}
               href={item.href}
-              className={`top-nav-link ${item.primary
+              className={`top-nav-link ${
+                item.primary
                   ? "top-nav-primary"
                   : item.label === "Dashboard"
                     ? "is-active"
                     : ""
-                }`}
+              }`}
             >
               {item.label}
             </a>
           ))}
+
+          {/* HISTORY BUTTON */}
+
+          <button
+            type="button"
+            className="top-nav-link"
+            onClick={handleHistoryClick}
+          >
+            History
+          </button>
         </nav>
+
+        {/* =====================================================
+            ACCOUNT
+        ===================================================== */}
 
         <div className="nav-account">
           <span className="account-label">
@@ -68,25 +97,48 @@ export default function DashboardNavbar() {
           />
         </div>
 
+        {/* =====================================================
+            MOBILE MENU BUTTON
+        ===================================================== */}
+
         <button
           type="button"
           className="mobile-menu"
           onClick={() => setOpen((value) => !value)}
           aria-label={
-            open ? "Close navigation" : "Open navigation"
+            open
+              ? "Close navigation"
+              : "Open navigation"
           }
         >
-          {open ? <X size={19} /> : <Menu size={19} />}
+          {open ? (
+            <X size={19} />
+          ) : (
+            <Menu size={19} />
+          )}
         </button>
       </div>
+
+      {/* =====================================================
+          MOBILE NAVIGATION
+      ===================================================== */}
 
       <AnimatePresence>
         {open && (
           <motion.nav
             className="mobile-nav"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{
+              opacity: 0,
+              height: 0,
+            }}
+            animate={{
+              opacity: 1,
+              height: "auto",
+            }}
+            exit={{
+              opacity: 0,
+              height: 0,
+            }}
             aria-label="Mobile navigation"
           >
             {navItems.map((item) => (
@@ -98,11 +150,23 @@ export default function DashboardNavbar() {
                     ? "mobile-nav-primary"
                     : ""
                 }
-                onClick={() => setOpen(false)}
+                onClick={() =>
+                  setOpen(false)
+                }
               >
                 {item.label}
               </a>
             ))}
+
+            {/* MOBILE HISTORY BUTTON */}
+
+            <button
+              type="button"
+              className="mobile-nav-history"
+              onClick={handleHistoryClick}
+            >
+              History
+            </button>
           </motion.nav>
         )}
       </AnimatePresence>

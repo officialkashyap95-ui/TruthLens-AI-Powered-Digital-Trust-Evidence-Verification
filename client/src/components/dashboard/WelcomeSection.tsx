@@ -1,7 +1,13 @@
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function WelcomeSection() {
+interface WelcomeSectionProps {
+  onOpenHistory: () => void;
+}
+
+export default function WelcomeSection({
+  onOpenHistory,
+}: WelcomeSectionProps) {
   return (
     <motion.section
       className="welcome-section"
@@ -14,16 +20,22 @@ export default function WelcomeSection() {
           TRUST WORKSPACE
         </span>
 
-        <h1>Verify what you can trust.</h1>
+        <h1>
+          Verify what you can trust.
+        </h1>
 
         <p>
-          Analyze digital content with evidence-based
-          verification and understand the signals behind
-          every result.
+          Analyze digital content with
+          evidence-based verification and
+          understand the signals behind every
+          result.
         </p>
       </div>
 
       <div className="welcome-actions">
+
+        {/* START VERIFICATION */}
+
         <a
           className="dash-primary-button"
           href="/verify"
@@ -32,12 +44,16 @@ export default function WelcomeSection() {
           <ArrowRight size={15} />
         </a>
 
-        <a
+        {/* VIEW HISTORY */}
+
+        <button
+          type="button"
           className="quiet-link"
-          href="/history"
+          onClick={onOpenHistory}
         >
           View History
-        </a>
+        </button>
+
       </div>
     </motion.section>
   );
