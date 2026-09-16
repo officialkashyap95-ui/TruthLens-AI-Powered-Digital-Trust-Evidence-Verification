@@ -314,7 +314,15 @@ function HistoryTableHeader() {
    COMPONENT
 ========================================================= */
 
-export default function RecentVerifications() {
+type RecentVerificationsProps = {
+  showHistory: boolean;
+  setShowHistory: (value: boolean) => void;
+};
+
+export default function RecentVerifications({
+  showHistory,
+  setShowHistory,
+}: RecentVerificationsProps) {
   const [
     history,
     setHistory,
@@ -331,11 +339,6 @@ export default function RecentVerifications() {
     error,
     setError,
   ] = useState("");
-
-  const [
-    showHistory,
-    setShowHistory,
-  ] = useState(false);
 
   /* =======================================================
      LOAD REAL HISTORY
