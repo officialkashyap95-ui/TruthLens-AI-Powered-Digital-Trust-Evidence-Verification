@@ -544,3 +544,138 @@
     gap: 5px;
   }
 }
+
+/* =========================================================
+   CLEAR HISTORY CONFIRMATION
+   ========================================================= */
+
+.settings-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.settings-confirm-modal {
+  width: min(100%, 420px);
+
+  padding: 26px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.18);
+}
+
+.settings-confirm-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 38px;
+  height: 38px;
+
+  margin-bottom: 16px;
+
+  border-radius: 10px;
+
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.settings-confirm-modal h2 {
+  margin: 0;
+
+  font-size: 17px;
+  font-weight: 650;
+
+  color: #0f172a;
+}
+
+.settings-confirm-modal p {
+  margin: 8px 0 0;
+
+  font-size: 13px;
+  line-height: 1.6;
+
+  color: #64748b;
+}
+
+.settings-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+
+  margin-top: 24px;
+}
+
+.settings-cancel-button,
+.settings-confirm-danger {
+  min-height: 35px;
+
+  padding: 0 13px;
+
+  border-radius: 8px;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.settings-cancel-button {
+  border: 1px solid #e2e8f0;
+
+  background: #ffffff;
+
+  color: #475569;
+}
+
+.settings-cancel-button:hover {
+  background: #f8fafc;
+}
+
+.settings-confirm-danger {
+  border: 1px solid #dc2626;
+
+  background: #dc2626;
+
+  color: #ffffff;
+}
+
+.settings-confirm-danger:hover {
+  background: #b91c1c;
+}
+
+@media (max-width: 520px) {
+  .settings-confirm-overlay {
+    align-items: flex-end;
+
+    padding: 14px;
+  }
+
+  .settings-confirm-modal {
+    border-radius: 14px;
+  }
+
+  .settings-confirm-actions {
+    width: 100%;
+  }
+
+  .settings-cancel-button,
+  .settings-confirm-danger {
+    flex: 1;
+  }
+}

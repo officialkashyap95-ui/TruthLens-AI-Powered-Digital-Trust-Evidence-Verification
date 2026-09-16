@@ -78,7 +78,17 @@ const signalSchema =
         required: true,
       },
 
+      category: {
+        type: String,
+        default: "",
+      },
+
       score: {
+        type: Number,
+        default: 0,
+      },
+
+      reliability: {
         type: Number,
         default: 0,
       },
@@ -100,6 +110,7 @@ const signalSchema =
         required: true,
       },
     },
+
     {
       _id: false,
     }
@@ -183,6 +194,158 @@ const metadataSchema =
   );
 
 /* =========================================================
+ FILE SCHEMA
+========================================================= */
+
+const fileSchema =
+  new mongoose.Schema(
+    {
+      originalName: {
+        type: String,
+        default: "",
+      },
+
+      mimeType: {
+        type: String,
+        default: "",
+      },
+
+      sizeBytes: {
+        type: Number,
+        default: 0,
+      },
+
+      sizeMB: {
+        type: Number,
+        default: 0,
+      },
+
+      format: {
+        type: String,
+        default: "",
+      },
+
+      sha256: {
+        type: String,
+        default: "",
+      },
+    },
+
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   VISUAL ANALYSIS SCHEMA
+========================================================= */
+
+const visualAnalysisSchema =
+  new mongoose.Schema(
+    {
+      available: {
+        type: Boolean,
+        default: false,
+      },
+
+      classification: {
+        type: String,
+        default: "UNVERIFIED",
+      },
+
+      aiGeneratedScore: {
+        type: Number,
+        default: null,
+      },
+
+      manipulationScore: {
+        type: Number,
+        default: null,
+      },
+
+      visualAuthenticityScore: {
+        type: Number,
+        default: null,
+      },
+
+      confidence: {
+        type: Number,
+        default: 0,
+      },
+
+      verdict: {
+        type: String,
+        default:
+          "Insufficient Evidence",
+      },
+
+      findings: {
+        type: [String],
+        default: [],
+      },
+
+      manipulationIndicators: {
+        type: [String],
+        default: [],
+      },
+
+      authenticityIndicators: {
+        type: [String],
+        default: [],
+      },
+
+      limitations: {
+        type: [String],
+        default: [],
+      },
+
+      evidenceQuality: {
+        type: Number,
+        default: 0,
+      },
+    },
+
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   FUSION SCHEMA
+========================================================= */
+
+const fusionSchema =
+  new mongoose.Schema(
+    {
+      forensicRisk: {
+        type: Number,
+        default: 0,
+      },
+
+      visualRisk: {
+        type: Number,
+        default: null,
+      },
+
+      evidenceQuality: {
+        type: Number,
+        default: 0,
+      },
+
+      independentSignals: {
+        type: Number,
+        default: 0,
+      },
+    },
+
+    {
+      _id: false,
+    }
+  );
+
+/* =========================================================
    VERIFICATION SCHEMA
 ========================================================= */
 
@@ -216,6 +379,20 @@ const verificationSchema =
       source: {
         type: String,
         default: "",
+      },
+      file: {
+        type: fileSchema,
+        default: undefined,
+      },
+
+      visualAnalysis: {
+        type: visualAnalysisSchema,
+        default: undefined,
+      },
+
+      fusion: {
+        type: fusionSchema,
+        default: undefined,
       },
 
       /* =====================================================
