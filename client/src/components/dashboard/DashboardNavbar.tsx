@@ -26,7 +26,13 @@ function Brand() {
   );
 }
 
-export default function DashboardNavbar() {
+type DashboardNavbarProps = {
+  onHistoryClick: () => void;
+};
+
+export default function DashboardNavbar({
+  onHistoryClick,
+}: DashboardNavbarProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -38,20 +44,31 @@ export default function DashboardNavbar() {
           className="desktop-nav"
           aria-label="Primary navigation"
         >
-          {navItems.map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className={`top-nav-link ${item.primary
-                  ? "top-nav-primary"
-                  : item.label === "Dashboard"
-                    ? "is-active"
-                    : ""
-                }`}
-            >
-              {item.label}
-            </a>
-          ))}
+          {navItems.map((item) =>
+            item.label === "History" ? (
+              <button
+                key={item.label}
+                type="button"
+                className="top-nav-link"
+                onClick={onHistoryClick}
+              >
+                {item.label}
+              </button>
+            ) : (
+              <a
+                key={item.label}
+                href={item.href}
+                className={`top-nav-link ${item.primary
+                    ? "top-nav-primary"
+                    : item.label === "Dashboard"
+                      ? "is-active"
+                      : ""
+                  }`}
+              >
+                {item.label}
+              </a>
+            )
+          )}
         </nav>
 
         <div className="nav-account">
@@ -89,20 +106,33 @@ export default function DashboardNavbar() {
             exit={{ opacity: 0, height: 0 }}
             aria-label="Mobile navigation"
           >
-            {navItems.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className={
-                  item.primary
-                    ? "mobile-nav-primary"
-                    : ""
-                }
-                onClick={() => setOpen(false)}
-              >
-                {item.label}
-              </a>
-            ))}
+            {navItems.map((item) =>
+              item.label === "History" ? (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onHistoryClick();
+                  }}
+                >
+                  {item.label}
+                </button>
+              ) : (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className={
+                    item.primary
+                      ? "mobile-nav-primary"
+                      : ""
+                  }
+                  onClick={() => setOpen(false)}
+                >
+                  {item.label}
+                </a>
+              )
+            )}
           </motion.nav>
         )}
       </AnimatePresence>

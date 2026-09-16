@@ -1,7 +1,13 @@
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function WelcomeSection() {
+type WelcomeSectionProps = {
+  onHistoryClick: () => void;
+};
+
+export default function WelcomeSection({
+  onHistoryClick,
+}: WelcomeSectionProps) {
   return (
     <motion.section
       className="welcome-section"
@@ -32,12 +38,13 @@ export default function WelcomeSection() {
           <ArrowRight size={15} />
         </a>
 
-        <a
+        <button
+          type="button"
           className="quiet-link"
-          href="/history"
+          onClick={onHistoryClick}
         >
           View History
-        </a>
+        </button>
       </div>
     </motion.section>
   );

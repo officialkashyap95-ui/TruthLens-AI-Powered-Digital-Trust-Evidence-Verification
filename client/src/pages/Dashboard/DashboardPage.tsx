@@ -1,3 +1,4 @@
+import { useState } from "react";
 import "./Dashboard.css";
 
 import DashboardNavbar from "../../components/dashboard/DashboardNavbar";
@@ -9,15 +10,20 @@ import TrustMethod from "../../components/dashboard/TrustMethod";
 import SystemStatus from "../../components/dashboard/SystemStatus";
 
 export default function DashboardPage() {
+  const [showHistory, setShowHistory] = useState(false);
+
   return (
     <div className="dashboard-shell">
-      <DashboardNavbar />
+      <DashboardNavbar onHistoryClick={() => setShowHistory(true)} />
 
       <main className="dashboard-content">
-        <WelcomeSection />
+         <WelcomeSection onHistoryClick={() => setShowHistory(true)} />
         <QuickVerification />
         <VerificationOverview />
-        <RecentVerifications />
+        <RecentVerifications
+          showHistory={showHistory}
+          setShowHistory={setShowHistory}
+        />
         <TrustMethod />
         <SystemStatus />
       </main>
