@@ -5,6 +5,7 @@ import SignInPage from "./pages/Auth/SignInPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import VerifyPage from "./pages/Verify/VerifyPage";
 import ResultPage from "./pages/Result/ResultPage";
+import SettingsPage from "./pages/Settings/SettingsPage";
 
 function App() {
   return (
@@ -32,6 +33,11 @@ function App() {
       <Route
         path="/result/:verificationId"
         element={<ResultPage />}
+      />
+
+      <Route 
+      path="/settings" 
+      element={<SettingsPage />} 
       />
     </Routes>
   );

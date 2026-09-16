@@ -1,0 +1,546 @@
+/* =========================================================
+   SETTINGS PAGE
+   ========================================================= */
+
+.settings-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 40px 32px 56px;
+}
+
+.settings-container {
+  width: min(100%, 1000px);
+  margin: 0 auto;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.settings-header {
+  margin-bottom: 36px;
+}
+
+.settings-overline {
+  display: inline-block;
+  margin-bottom: 8px;
+
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: #64748b;
+}
+
+.settings-header h1 {
+  margin: 0;
+
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+}
+
+.settings-header p {
+  margin: 10px 0 0;
+
+  max-width: 620px;
+
+  font-size: 14px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+
+/* =========================================================
+   SECTION
+   ========================================================= */
+
+.settings-section {
+  margin-bottom: 30px;
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  margin-bottom: 12px;
+}
+
+.settings-section-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 34px;
+  height: 34px;
+
+  flex-shrink: 0;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+
+  background: #ffffff;
+  color: #475569;
+}
+
+.settings-section-heading h2 {
+  margin: 0;
+
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 650;
+
+  color: #0f172a;
+}
+
+.settings-section-heading p {
+  margin: 4px 0 0;
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  color: #64748b;
+}
+
+
+/* =========================================================
+   CARD
+   ========================================================= */
+
+.settings-card {
+  overflow: hidden;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+
+/* =========================================================
+   ROW
+   ========================================================= */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+
+  min-height: 78px;
+
+  padding: 18px 20px;
+}
+
+.settings-row-content {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+
+  min-width: 0;
+}
+
+.settings-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 34px;
+  height: 34px;
+
+  flex-shrink: 0;
+
+  border-radius: 9px;
+
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.settings-row-content h3 {
+  margin: 0;
+
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+
+  color: #0f172a;
+}
+
+.settings-row-content p {
+  margin: 4px 0 0;
+
+  max-width: 560px;
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  color: #64748b;
+}
+
+
+/* =========================================================
+   DIVIDER
+   ========================================================= */
+
+.settings-divider {
+  height: 1px;
+  margin: 0 20px;
+
+  background: #f1f5f9;
+}
+
+
+/* =========================================================
+   ACTION BUTTON
+   ========================================================= */
+
+.settings-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+
+  flex-shrink: 0;
+
+  min-height: 34px;
+  padding: 0 12px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+
+  background: #ffffff;
+
+  color: #334155;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.settings-action:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.settings-action:active {
+  transform: translateY(1px);
+}
+
+
+/* =========================================================
+   TOGGLE
+   ========================================================= */
+
+.settings-toggle {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+
+  flex-shrink: 0;
+
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-toggle span {
+  position: relative;
+
+  display: block;
+
+  width: 40px;
+  height: 22px;
+
+  border-radius: 999px;
+
+  background: #cbd5e1;
+
+  transition: background 0.2s ease;
+}
+
+.settings-toggle span::after {
+  content: "";
+
+  position: absolute;
+  top: 3px;
+  left: 3px;
+
+  width: 16px;
+  height: 16px;
+
+  border-radius: 50%;
+
+  background: #ffffff;
+
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+
+  transition: transform 0.2s ease;
+}
+
+.settings-toggle input:checked + span {
+  background: #0f766e;
+}
+
+.settings-toggle input:checked + span::after {
+  transform: translateX(18px);
+}
+
+.settings-toggle input:focus-visible + span {
+  outline: 2px solid #14b8a6;
+  outline-offset: 3px;
+}
+
+
+/* =========================================================
+   THEME OPTIONS
+   ========================================================= */
+
+.theme-options {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  flex-shrink: 0;
+
+  padding: 4px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+
+  background: #f8fafc;
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  min-height: 30px;
+  padding: 0 10px;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: #64748b;
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.theme-option:hover {
+  color: #334155;
+}
+
+.theme-option.is-selected {
+  background: #ffffff;
+  color: #0f172a;
+
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+
+/* =========================================================
+   DANGER BUTTON
+   ========================================================= */
+
+.settings-danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  min-height: 34px;
+  padding: 0 12px;
+
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+
+  background: #fffafa;
+
+  color: #b91c1c;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.settings-danger-button:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-top: 46px;
+  padding-top: 20px;
+
+  border-top: 1px solid #e2e8f0;
+
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.settings-footer span:first-child {
+  font-weight: 600;
+  color: #64748b;
+}
+
+
+/* =========================================================
+   FOCUS STATES
+   ========================================================= */
+
+.settings-action:focus-visible,
+.settings-danger-button:focus-visible,
+.theme-option:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .settings-page {
+    padding: 28px 18px 44px;
+  }
+
+  .settings-header {
+    margin-bottom: 28px;
+  }
+
+  .settings-header h1 {
+    font-size: 28px;
+  }
+
+  .settings-section {
+    margin-bottom: 24px;
+  }
+
+  .settings-section-heading {
+    gap: 10px;
+  }
+
+  .settings-row {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .settings-row-content {
+    align-items: flex-start;
+  }
+
+  .settings-row-content p {
+    max-width: none;
+  }
+
+  .settings-action,
+  .settings-danger-button {
+    align-self: center;
+  }
+
+  .theme-options {
+    align-self: center;
+  }
+
+  .settings-divider {
+    margin: 0 16px;
+  }
+}
+
+
+@media (max-width: 520px) {
+  .settings-page {
+    padding: 24px 14px 36px;
+  }
+
+  .settings-header h1 {
+    font-size: 26px;
+  }
+
+  .settings-header p {
+    font-size: 13px;
+  }
+
+  .settings-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .settings-row-content {
+    width: 100%;
+  }
+
+  .settings-action,
+  .settings-danger-button {
+    align-self: flex-start;
+  }
+
+  .theme-options {
+    align-self: flex-start;
+  }
+
+  .settings-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+}
