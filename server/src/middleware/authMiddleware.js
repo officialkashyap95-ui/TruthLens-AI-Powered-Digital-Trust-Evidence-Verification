@@ -1,13 +1,20 @@
-const authMiddleware = (req, res, next) => {
+const authMiddleware = (
+  req,
+  res,
+  next
+) => {
   /*
    * Temporary development authentication.
    *
-   * Clerk authentication will be added here next.
+   * Later this will be replaced with
+   * Clerk token verification.
    */
 
-  req.userId = "development-user";
+  req.userId =
+    "development-user";
 
   next();
 };
 
-module.exports = authMiddleware;
+module.exports =
+  authMiddleware;

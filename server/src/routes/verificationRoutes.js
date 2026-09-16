@@ -4,11 +4,14 @@ const {
   createVerification,
   getVerification,
   getVerificationHistory,
+  deleteVerificationHistory,
 } = require("../controllers/verificationController");
 
-const upload = require("../middleware/uploadMiddleware");
+const upload =
+  require("../middleware/uploadMiddleware");
 
-const router = express.Router();
+const router =
+  express.Router();
 
 /* =========================================================
    CREATE VERIFICATION
@@ -30,6 +33,15 @@ router.get(
 );
 
 /* =========================================================
+   DELETE VERIFICATION HISTORY
+========================================================= */
+
+router.delete(
+  "/history",
+  deleteVerificationHistory
+);
+
+/* =========================================================
    GET SINGLE VERIFICATION
 ========================================================= */
 
@@ -38,4 +50,5 @@ router.get(
   getVerification
 );
 
-module.exports = router;
+module.exports =
+  router;

@@ -4,7 +4,19 @@ const cors = require("cors");
 const verificationRoutes =
   require("./routes/verificationRoutes");
 
-const app = express();
+const settingsRoutes =
+  require("./routes/settingsRoutes");
+
+const authMiddleware =
+  require("./middleware/authMiddleware");
+
+const app =
+  express();
+
+
+/* =========================================================
+   CORS
+========================================================= */
 
 const allowedOrigins = [
   process.env.CLIENT_URL ||
@@ -17,12 +29,22 @@ const allowedOrigins = [
   "https://truth-lens-ai-powered-digital-trust.vercel.app",
 ];
 
+
 app.use(
   cors({
     origin: (
       origin,
       callback
     ) => {
+
+      /*
+       * Allow requests without
+       * an Origin header.
+       *
+       * Useful for curl/Postman/server
+       * requests.
+       */
+
       if (
         !origin ||
         allowedOrigins.includes(origin)
@@ -44,6 +66,11 @@ app.use(
   })
 );
 
+
+/* =========================================================
+   BODY PARSERS
+========================================================= */
+
 app.use(
   express.json({
     limit: "10mb",
@@ -56,19 +83,31 @@ app.use(
   })
 );
 
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
 
-    message:
-      "TruthLens API is running",
-  });
-});
+/* =========================================================
+   ROOT
+========================================================= */
+
+app.get(
+  "/",
+  (req, res) => {
+    res.status(200).json({
+      success: true,
+      message:
+        "TruthLens API is running",
+    });
+  }
+);
+
+
+/* =========================================================
+   HEALTH CHECK
+========================================================= */
 
 app.get(
   "/api/health",
   (req, res) => {
-    res.json({
+    res.status(200).json({
       success: true,
 
       service:
@@ -83,9 +122,86 @@ app.get(
   }
 );
 
+
+/* =========================================================
+   DEVELOPMENT AUTHENTICATION
+========================================================= */
+
+app.use(
+  authMiddleware
+);
+
+
+/* =========================================================
+   VERIFICATION ROUTES
+========================================================= */
+
 app.use(
   "/api/verifications",
   verificationRoutes
 );
 
-module.exports = app;
+
+/* =========================================================
+   SETTINGS ROUTES
+========================================================= */
+
+app.use(
+  "/api/settings",
+  settingsRoutes
+);
+
+
+/* =========================================================
+   404 HANDLER
+========================================================= */
+
+app.use(
+  (req, res) => {
+    res.status(404).json({
+      success: false,
+
+      message:
+        `Route not found: ${req.method} ${req.originalUrl}`,
+    });
+  }
+);
+
+
+/* =========================================================
+   ERROR HANDLER
+========================================================= */
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+
+    console.error(
+      "Unhandled server error:"
+    );
+
+    console.error(error);
+
+    res.status(
+      error.status || 500
+    ).json({
+      success: false,
+
+      message:
+        error.message ||
+        "Internal server error.",
+    });
+  }
+);
+
+
+/* =========================================================
+   EXPORT
+========================================================= */
+
+module.exports =
+  app;

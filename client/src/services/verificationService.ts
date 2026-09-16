@@ -219,11 +219,9 @@ export interface ImageProperties {
 ========================================================= */
 
 export interface Verification {
-
   verificationId: string;
 
   userId?: string;
-
 
   type: VerificationType;
 
@@ -231,10 +229,9 @@ export interface Verification {
 
   source?: string;
 
-
-  /*
-   * FINAL TRUTHLENS ASSESSMENT
-   */
+  /* -------------------------------------------------------
+     FINAL TRUTHLENS ASSESSMENT
+  ------------------------------------------------------- */
 
   verdict: string;
 
@@ -246,30 +243,25 @@ export interface Verification {
 
   summary: string;
 
-
-  /*
-   * EXPLAINABILITY
-   */
+  /* -------------------------------------------------------
+     EXPLAINABILITY
+  ------------------------------------------------------- */
 
   analysis: AnalysisItem[];
 
   evidence: Evidence[];
 
-
-  /*
-   * PROCESSING
-   */
+  /* -------------------------------------------------------
+     PROCESSING
+  ------------------------------------------------------- */
 
   sourcesAnalyzed: number;
 
   processingTime: string;
 
-
-  /*
-   * FLAT FILE FIELDS
-   *
-   * Kept for compatibility with existing UI.
-   */
+  /* -------------------------------------------------------
+     FLAT FILE FIELDS
+  ------------------------------------------------------- */
 
   fileHash?: string;
 
@@ -281,52 +273,45 @@ export interface Verification {
 
   imageFormat?: string;
 
-
-  /*
-   * ACTUAL BACKEND FILE OBJECT
-   */
+  /* -------------------------------------------------------
+     ACTUAL BACKEND FILE OBJECT
+  ------------------------------------------------------- */
 
   file?: VerificationFile;
 
-
-  /*
-   * IMAGE PROPERTIES
-   */
+  /* -------------------------------------------------------
+     IMAGE PROPERTIES
+  ------------------------------------------------------- */
 
   imageProperties?: ImageProperties;
 
-
-  /*
-   * METADATA
-   */
+  /* -------------------------------------------------------
+     METADATA
+  ------------------------------------------------------- */
 
   metadata?: VerificationMetadata;
 
-
-  /*
-   * FORENSIC SIGNALS
-   */
+  /* -------------------------------------------------------
+     FORENSIC SIGNALS
+  ------------------------------------------------------- */
 
   signals?: VerificationSignal[];
 
-
-  /*
-   * GEMINI / VISUAL ANALYSIS
-   */
+  /* -------------------------------------------------------
+     GEMINI / VISUAL ANALYSIS
+  ------------------------------------------------------- */
 
   visualAnalysis?: VisualAnalysis;
 
-
-  /*
-   * EVIDENCE FUSION
-   */
+  /* -------------------------------------------------------
+     EVIDENCE FUSION
+  ------------------------------------------------------- */
 
   fusion?: VerificationFusion;
 
-
-  /*
-   * TIMESTAMPS
-   */
+  /* -------------------------------------------------------
+     TIMESTAMPS
+  ------------------------------------------------------- */
 
   createdAt?: string;
 
@@ -339,23 +324,17 @@ export interface Verification {
 ========================================================= */
 
 export interface VerificationResponse {
-
   success: boolean;
 
   message: string;
 
   verification?: Verification;
 
-  /*
-   * Some backend implementations may return
-   * the analysis directly as data.
-   *
-   * This keeps the service flexible while
-   * the backend is being integrated.
-   */
-
   data?: Verification;
+
+  settings?: UserSettings;
 }
+
 
 /* =========================================================
    VERIFICATION HISTORY RESPONSE
@@ -363,9 +342,69 @@ export interface VerificationResponse {
 
 export interface VerificationHistoryResponse {
   success: boolean;
+
   message: string;
+
   count: number;
+
   verifications: Verification[];
+}
+
+
+/* =========================================================
+   USER SETTINGS
+========================================================= */
+
+export interface UserSettings {
+  userId: string;
+
+  saveHistory: boolean;
+
+  showConfidence: boolean;
+
+  showEvidence: boolean;
+
+  verificationCompleted: boolean;
+
+  verificationErrors: boolean;
+
+  theme: "light" | "dark";
+
+  createdAt?: string;
+
+  updatedAt?: string;
+}
+
+
+/* =========================================================
+   SETTINGS RESPONSE
+========================================================= */
+
+export interface SettingsResponse {
+  success: boolean;
+
+  message: string;
+
+  settings: UserSettings;
+}
+
+
+/* =========================================================
+   UPDATE SETTINGS REQUEST
+========================================================= */
+
+export interface UpdateSettingsRequest {
+  saveHistory?: boolean;
+
+  showConfidence?: boolean;
+
+  showEvidence?: boolean;
+
+  verificationCompleted?: boolean;
+
+  verificationErrors?: boolean;
+
+  theme?: "light" | "dark";
 }
 
 
@@ -373,9 +412,19 @@ export interface VerificationHistoryResponse {
    API URL
 ========================================================= */
 
+/*
+ * Local development:
+ *
+ * VITE_API_URL=http://localhost:5001
+ *
+ * Production:
+ *
+ * VITE_API_URL=https://truthlens-ai-powered-digital-trust-3kwt.onrender.com
+ */
+
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  "https://truthlens-ai-powered-digital-trust-3kwt.onrender.com";
+  "http://localhost:5001";
 
 
 /* =========================================================
@@ -385,14 +434,13 @@ const API_URL =
 /*
  * Safely parse JSON.
  *
- * This prevents the frontend from crashing
- * if the backend returns HTML/text instead of JSON.
+ * This prevents the frontend from crashing if the backend
+ * returns HTML/text instead of JSON.
  */
 
 const parseJsonResponse = async (
   response: Response
 ) => {
-
   const text =
     await response.text();
 
@@ -401,11 +449,8 @@ const parseJsonResponse = async (
   }
 
   try {
-
     return JSON.parse(text);
-
   } catch {
-
     throw new Error(
       `Server returned an invalid response (${response.status}).`
     );
@@ -417,28 +462,9 @@ const parseJsonResponse = async (
    NORMALIZE VERIFICATION
 ========================================================= */
 
-/*
- * Converts the backend TruthLens image result
- * into the frontend Verification shape.
- *
- * This is especially useful because the image
- * engine returns:
- *
- * file.sha256
- * file.originalName
- * file.format
- *
- * instead of:
- *
- * fileHash
- * fileName
- * imageFormat
- */
-
 const normalizeVerification = (
   verification: Verification
 ): Verification => {
-
   const normalized: Verification = {
     ...verification,
   };
@@ -449,7 +475,6 @@ const normalizeVerification = (
   ------------------------------------------------------- */
 
   if (verification.file) {
-
     normalized.fileHash =
       verification.file.sha256 ??
       verification.fileHash;
@@ -526,9 +551,7 @@ const normalizeVerification = (
 export const createVerification = async (
   data: VerificationRequest
 ): Promise<VerificationResponse> => {
-
   try {
-
     const response =
       await fetch(
         `${API_URL}/api/verifications`,
@@ -556,7 +579,6 @@ export const createVerification = async (
       !response.ok ||
       !result?.success
     ) {
-
       throw new Error(
         result?.message ||
         `Verification failed (${response.status}).`
@@ -567,7 +589,6 @@ export const createVerification = async (
     if (
       result.verification
     ) {
-
       result.verification =
         normalizeVerification(
           result.verification
@@ -578,9 +599,8 @@ export const createVerification = async (
     return result;
 
   } catch (error) {
-
     console.error(
-      "Text verification error:",
+      "[TruthLens] Text verification error:",
       error
     );
 
@@ -598,23 +618,20 @@ export const createImageVerification = async (
   source?: string
 ): Promise<VerificationResponse> => {
 
-  /*
-   * Validate file before sending.
-   */
+  /* -------------------------------------------------------
+     VALIDATE FILE
+  ------------------------------------------------------- */
 
   if (!file) {
-
     throw new Error(
       "Please select an image."
     );
   }
 
 
-  /*
-   * Frontend safety check.
-   *
-   * Backend remains the authoritative validator.
-   */
+  /* -------------------------------------------------------
+     ALLOWED TYPES
+  ------------------------------------------------------- */
 
   const allowedTypes = [
     "image/jpeg",
@@ -628,16 +645,15 @@ export const createImageVerification = async (
       file.type
     )
   ) {
-
     throw new Error(
       "Unsupported image type. Please upload JPG, PNG, or WEBP."
     );
   }
 
 
-  /*
-   * Backend limit is 10 MB.
-   */
+  /* -------------------------------------------------------
+     MAX SIZE
+  ------------------------------------------------------- */
 
   const maxSize =
     10 * 1024 * 1024;
@@ -646,7 +662,6 @@ export const createImageVerification = async (
   if (
     file.size > maxSize
   ) {
-
     throw new Error(
       "Image exceeds the maximum allowed size of 10 MB."
     );
@@ -661,13 +676,6 @@ export const createImageVerification = async (
     new FormData();
 
 
-  /*
-   * Backend expects:
-   *
-   * type=image
-   * file=<image>
-   */
-
   formData.append(
     "type",
     "image"
@@ -680,14 +688,9 @@ export const createImageVerification = async (
   );
 
 
-  /*
-   * Optional source.
-   */
-
   if (
     source?.trim()
   ) {
-
     formData.append(
       "source",
       source.trim()
@@ -700,7 +703,6 @@ export const createImageVerification = async (
   ------------------------------------------------------- */
 
   try {
-
     console.log(
       "[TruthLens] Uploading image:",
       file.name
@@ -714,14 +716,9 @@ export const createImageVerification = async (
           method: "POST",
 
           /*
-           * IMPORTANT:
+           * Do NOT manually set Content-Type.
            *
-           * Do NOT set Content-Type manually.
-           *
-           * Browser automatically creates:
-           *
-           * multipart/form-data;
-           * boundary=...
+           * The browser creates the multipart boundary.
            */
 
           body:
@@ -740,7 +737,6 @@ export const createImageVerification = async (
       !response.ok ||
       !result?.success
     ) {
-
       throw new Error(
         result?.message ||
         `Image verification failed (${response.status}).`
@@ -748,28 +744,15 @@ export const createImageVerification = async (
     }
 
 
-    /*
-     * Normalize the actual backend result.
-     */
-
     if (
       result.verification
     ) {
-
       result.verification =
         normalizeVerification(
           result.verification
         );
     }
 
-
-    /*
-     * Debugging information.
-     *
-     * This is useful right now because
-     * we need to confirm what the backend
-     * actually returns.
-     */
 
     console.log(
       "[TruthLens] Image verification response:",
@@ -780,7 +763,6 @@ export const createImageVerification = async (
     if (
       result.verification
     ) {
-
       console.log(
         "[TruthLens] Final verdict:",
         result.verification.verdict
@@ -811,7 +793,6 @@ export const createImageVerification = async (
     return result;
 
   } catch (error) {
-
     console.error(
       "[TruthLens] Image verification error:",
       error
@@ -823,7 +804,7 @@ export const createImageVerification = async (
 
 
 /* =========================================================
-   GET VERIFICATION
+   GET SINGLE VERIFICATION
 ========================================================= */
 
 export const getVerification = async (
@@ -833,7 +814,6 @@ export const getVerification = async (
   if (
     !verificationId?.trim()
   ) {
-
     throw new Error(
       "Verification ID is missing."
     );
@@ -841,7 +821,6 @@ export const getVerification = async (
 
 
   try {
-
     const response =
       await fetch(
         `${API_URL}/api/verifications/${encodeURIComponent(
@@ -860,7 +839,6 @@ export const getVerification = async (
       !response.ok ||
       !result?.success
     ) {
-
       throw new Error(
         result?.message ||
         `Failed to load verification (${response.status}).`
@@ -868,22 +846,12 @@ export const getVerification = async (
     }
 
 
-    /*
-     * Backend should return:
-     *
-     * {
-     *   success: true,
-     *   verification: {...}
-     * }
-     */
-
     const verification =
       result.verification ||
       result.data;
 
 
     if (!verification) {
-
       throw new Error(
         "Verification result was not returned."
       );
@@ -896,10 +864,6 @@ export const getVerification = async (
       );
 
 
-    /*
-     * Useful while integrating.
-     */
-
     console.log(
       "[TruthLens] Loaded verification:",
       normalized
@@ -909,7 +873,6 @@ export const getVerification = async (
     return normalized;
 
   } catch (error) {
-
     console.error(
       "[TruthLens] Get verification error:",
       error
@@ -918,16 +881,11 @@ export const getVerification = async (
     throw error;
   }
 };
+
+
 /* =========================================================
    GET VERIFICATION HISTORY
 ========================================================= */
-
-export interface VerificationHistoryResponse {
-  success: boolean;
-  message: string;
-  count: number;
-  verifications: Verification[];
-}
 
 export const getVerificationHistory =
   async (): Promise<Verification[]> => {
@@ -936,38 +894,242 @@ export const getVerificationHistory =
         "[TruthLens] Loading verification history..."
       );
 
-      const response = await fetch(
-        `${API_URL}/api/verifications/history`
-      );
+
+      const response =
+        await fetch(
+          `${API_URL}/api/verifications/history`
+        );
+
 
       const result =
         (await parseJsonResponse(
           response
         )) as VerificationHistoryResponse | null;
 
-      if (!response.ok || !result?.success) {
+
+      if (
+        !response.ok ||
+        !result?.success
+      ) {
         throw new Error(
           result?.message ||
-            `Failed to load verification history (${response.status}).`
+          `Failed to load verification history (${response.status}).`
         );
       }
 
+
       const verifications =
-        Array.isArray(result.verifications)
+        Array.isArray(
+          result.verifications
+        )
           ? result.verifications
           : [];
+
 
       console.log(
         "[TruthLens] History records:",
         verifications.length
       );
 
+
       return verifications.map(
         normalizeVerification
       );
+
     } catch (error) {
       console.error(
         "[TruthLens] Get verification history error:",
+        error
+      );
+
+      throw error;
+    }
+  };
+
+
+/* =========================================================
+   CLEAR VERIFICATION HISTORY
+========================================================= */
+
+export const clearVerificationHistory =
+  async (): Promise<number> => {
+    try {
+      console.log(
+        "[TruthLens] Clearing verification history..."
+      );
+
+
+      const response =
+        await fetch(
+          `${API_URL}/api/verifications/history`,
+          {
+            method: "DELETE",
+          }
+        );
+
+
+      const result =
+        (await parseJsonResponse(
+          response
+        )) as {
+          success: boolean;
+          message: string;
+          deletedCount?: number;
+        } | null;
+
+
+      if (
+        !response.ok ||
+        !result?.success
+      ) {
+        throw new Error(
+          result?.message ||
+          `Failed to clear verification history (${response.status}).`
+        );
+      }
+
+
+      const deletedCount =
+        result.deletedCount ?? 0;
+
+
+      console.log(
+        "[TruthLens] History cleared:",
+        deletedCount
+      );
+
+
+      return deletedCount;
+
+    } catch (error) {
+      console.error(
+        "[TruthLens] Clear verification history error:",
+        error
+      );
+
+      throw error;
+    }
+  };
+
+
+/* =========================================================
+   GET USER SETTINGS
+========================================================= */
+
+export const getSettings =
+  async (): Promise<UserSettings> => {
+    try {
+      console.log(
+        "[TruthLens] Loading user settings..."
+      );
+
+
+      const response =
+        await fetch(
+          `${API_URL}/api/settings`
+        );
+
+
+      const result =
+        (await parseJsonResponse(
+          response
+        )) as SettingsResponse | null;
+
+
+      if (
+        !response.ok ||
+        !result?.success ||
+        !result.settings
+      ) {
+        throw new Error(
+          result?.message ||
+          `Failed to load settings (${response.status}).`
+        );
+      }
+
+
+      console.log(
+        "[TruthLens] Settings loaded:",
+        result.settings
+      );
+
+
+      return result.settings;
+
+    } catch (error) {
+      console.error(
+        "[TruthLens] Get settings error:",
+        error
+      );
+
+      throw error;
+    }
+  };
+
+
+/* =========================================================
+   UPDATE USER SETTINGS
+========================================================= */
+
+export const updateSettings =
+  async (
+    settings: UpdateSettingsRequest
+  ): Promise<UserSettings> => {
+    try {
+      console.log(
+        "[TruthLens] Updating settings:",
+        settings
+      );
+
+
+      const response =
+        await fetch(
+          `${API_URL}/api/settings`,
+          {
+            method: "PATCH",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                settings
+              ),
+          }
+        );
+
+
+      const result =
+        (await parseJsonResponse(
+          response
+        )) as SettingsResponse | null;
+
+
+      if (
+        !response.ok ||
+        !result?.success ||
+        !result.settings
+      ) {
+        throw new Error(
+          result?.message ||
+          `Failed to update settings (${response.status}).`
+        );
+      }
+
+
+      console.log(
+        "[TruthLens] Settings updated:",
+        result.settings
+      );
+
+
+      return result.settings;
+
+    } catch (error) {
+      console.error(
+        "[TruthLens] Update settings error:",
         error
       );
 

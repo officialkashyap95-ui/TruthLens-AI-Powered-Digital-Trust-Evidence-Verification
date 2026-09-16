@@ -1,5 +1,5 @@
-const Verification =
-  require("../models/Verification");
+const Verification = require("../models/Verification");
+const UserSettings = require("../models/UserSettings");
 
 const {
   analyzeContent,
@@ -11,33 +11,73 @@ const {
 
 
 /* =========================================================
+   GET USER SETTINGS
+========================================================= */
+
+const getUserSettings = async (userId) => {
+  let settings = await UserSettings.findOne({
+    userId,
+  });
+
+  if (!settings) {
+    settings = await UserSettings.create({
+      userId,
+    });
+  }
+
+  return settings;
+};
+
+
+/* =========================================================
+   GENERATE VERIFICATION ID
+========================================================= */
+
+const generateVerificationId = () => {
+  const year = new Date().getFullYear();
+
+  const randomNumber = Math.floor(
+    1000 + Math.random() * 9000
+  );
+
+  return `TL-${year}-${randomNumber}`;
+};
+
+
+/* =========================================================
    CREATE VERIFICATION
 ========================================================= */
 
-const createVerification = async (
-  req,
-  res
-) => {
+const createVerification = async (req, res) => {
   try {
-
     const {
       type,
       content,
       source,
     } = req.body;
 
-
     /* =====================================================
-       BASIC TYPE VALIDATION
+       BASIC VALIDATION
     ===================================================== */
 
     if (!type) {
       return res.status(400).json({
         success: false,
-        message:
-          "Verification type is required.",
+        message: "Verification type is required.",
       });
     }
+
+
+    /* =====================================================
+       USER + SETTINGS
+    ===================================================== */
+
+    const userId =
+      req.userId ||
+      "development-user";
+
+    const settings =
+      await getUserSettings(userId);
 
 
     /* =====================================================
@@ -45,15 +85,12 @@ const createVerification = async (
     ===================================================== */
 
     if (type === "image") {
-
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message:
-            "Please upload an image.",
+          message: "Please upload an image.",
         });
       }
-
 
       console.log("");
       console.log(
@@ -87,113 +124,133 @@ const createVerification = async (
 
       const analysis =
         await analyzeImage({
-          buffer:
-            req.file.buffer,
-
-          mimetype:
-            req.file.mimetype,
-
-          originalname:
-            req.file.originalname,
+          buffer: req.file.buffer,
+          mimetype: req.file.mimetype,
+          originalname: req.file.originalname,
         });
 
 
       /* ===================================================
-         SAVE IMAGE VERIFICATION
+         SAVE IMAGE HISTORY
       =================================================== */
 
-      const verification =
-        await Verification.create({
+      let verification = null;
 
-          userId:
-            req.userId ||
-            "development-user",
+      if (settings.saveHistory) {
+        verification =
+          await Verification.create({
+            userId,
 
-          type:
-            "image",
+            type: "image",
 
-          content:
-            req.file.originalname,
+            content:
+              req.file.originalname,
 
-          source:
-            source || "",
+            source:
+              source || "",
 
-          verdict:
-            analysis.verdict,
+            verdict:
+              analysis.verdict,
 
-          confidence:
-            analysis.confidence,
+            confidence:
+              analysis.confidence,
 
-          summary:
-            analysis.summary,
+            riskScore:
+              analysis.riskScore,
 
-          analysis:
-            analysis.analysis || [],
+            summary:
+              analysis.summary,
 
-          evidence:
-            analysis.evidence || [],
+            analysis:
+              analysis.analysis || [],
 
-          sourcesAnalyzed:
-            analysis.sourcesAnalyzed ||
-            0,
+            evidence:
+              analysis.evidence || [],
 
-          processingTime:
-            analysis.processingTime ||
-            "",
+            sourcesAnalyzed:
+              analysis.sourcesAnalyzed || 0,
 
-          verificationId:
-            generateVerificationId(),
+            processingTime:
+              analysis.processingTime || "",
 
-          riskScore:
-            analysis.riskScore,
+            verificationId:
+              generateVerificationId(),
 
-          fileHash:
-            analysis.file?.sha256,
+            fileHash:
+              analysis.file?.sha256,
 
-          fileName:
-            analysis.file?.originalName,
+            fileName:
+              analysis.file?.originalName,
 
-          mimeType:
-            analysis.file?.mimeType,
+            mimeType:
+              analysis.file?.mimeType,
 
-          fileSize:
-            analysis.file?.sizeBytes,
+            fileSize:
+              analysis.file?.sizeBytes,
 
-          imageFormat:
-            analysis.file?.format,
+            imageFormat:
+              analysis.file?.format,
 
-          file:
-            analysis.file,
+            file:
+              analysis.file,
 
-          metadata:
-            analysis.metadata,
+            metadata:
+              analysis.metadata,
 
-          signals:
-            analysis.signals,
+            signals:
+              analysis.signals,
 
-          visualAnalysis:
-            analysis.visualAnalysis,
+            visualAnalysis:
+              analysis.visualAnalysis,
 
-          fusion:
-            analysis.fusion,
-        });
+            fusion:
+              analysis.fusion,
+          });
+
+        console.log(
+          "Image verification saved:",
+          verification.verificationId
+        );
+      } else {
+        console.log(
+          "Image verification history saving is disabled."
+        );
+      }
 
 
-      console.log(
-        "Image verification saved:",
-        verification.verificationId
-      );
-
+      /* ===================================================
+         IMAGE RESPONSE
+      =================================================== */
 
       return res.status(201).json({
-
         success: true,
 
         message:
-          "Image verification created successfully.",
+          settings.saveHistory
+            ? "Image verification created successfully."
+            : "Image verification completed successfully. History saving is disabled.",
 
         verification,
 
+        settings: {
+          saveHistory:
+            settings.saveHistory,
+
+          showConfidence:
+            settings.showConfidence,
+
+          showEvidence:
+            settings.showEvidence,
+
+          verificationCompleted:
+            settings.verificationCompleted,
+
+          verificationErrors:
+            settings.verificationErrors,
+
+          theme:
+            settings.theme,
+        },
       });
     }
 
@@ -203,22 +260,15 @@ const createVerification = async (
     ===================================================== */
 
     if (type === "text") {
-
       if (
         !content ||
         !content.trim()
       ) {
-
         return res.status(400).json({
-
           success: false,
-
-          message:
-            "Text content is required.",
-
+          message: "Text content is required.",
         });
       }
-
 
       console.log("");
       console.log(
@@ -232,8 +282,7 @@ const createVerification = async (
 
       console.log(
         "Source:",
-        source ||
-        "No source provided"
+        source || "No source provided"
       );
 
 
@@ -243,83 +292,108 @@ const createVerification = async (
 
       const analysis =
         await analyzeContent({
-
-          type,
+          type: "text",
 
           content:
             content.trim(),
 
           source:
             source || "",
-
         });
 
 
       /* ===================================================
-         SAVE TEXT VERIFICATION
+         SAVE TEXT HISTORY
       =================================================== */
 
-      const verification =
-        await Verification.create({
+      let verification = null;
 
-          userId:
-            req.userId ||
-            "development-user",
+      if (settings.saveHistory) {
+        verification =
+          await Verification.create({
+            userId,
 
-          type:
-            "text",
+            type: "text",
 
-          content:
-            content.trim(),
+            content:
+              content.trim(),
 
-          source:
-            source || "",
+            source:
+              source || "",
 
-          verdict:
-            analysis.verdict,
+            verdict:
+              analysis.verdict,
 
-          confidence:
-            analysis.confidence,
+            confidence:
+              analysis.confidence,
 
-          summary:
-            analysis.summary,
+            riskScore:
+              analysis.riskScore || 0,
 
-          analysis:
-            analysis.analysis || [],
+            summary:
+              analysis.summary,
 
-          evidence:
-            analysis.evidence || [],
+            analysis:
+              analysis.analysis || [],
 
-          sourcesAnalyzed:
-            analysis.sourcesAnalyzed ||
-            0,
+            evidence:
+              analysis.evidence || [],
 
-          processingTime:
-            analysis.processingTime ||
-            "",
+            sourcesAnalyzed:
+              analysis.sourcesAnalyzed || 0,
 
-          verificationId:
-            analysis.verificationId ||
-            generateVerificationId(),
+            processingTime:
+              analysis.processingTime || "",
 
-        });
+            verificationId:
+              analysis.verificationId ||
+              generateVerificationId(),
+          });
+
+        console.log(
+          "Text verification saved:",
+          verification.verificationId
+        );
+      } else {
+        console.log(
+          "Text verification history saving is disabled."
+        );
+      }
 
 
-      console.log(
-        "Text verification saved:",
-        verification.verificationId
-      );
-
+      /* ===================================================
+         TEXT RESPONSE
+      =================================================== */
 
       return res.status(201).json({
-
         success: true,
 
         message:
-          "Text verification created successfully.",
+          settings.saveHistory
+            ? "Text verification created successfully."
+            : "Text verification completed successfully. History saving is disabled.",
 
         verification,
 
+        settings: {
+          saveHistory:
+            settings.saveHistory,
+
+          showConfidence:
+            settings.showConfidence,
+
+          showEvidence:
+            settings.showEvidence,
+
+          verificationCompleted:
+            settings.verificationCompleted,
+
+          verificationErrors:
+            settings.verificationErrors,
+
+          theme:
+            settings.theme,
+        },
       });
     }
 
@@ -329,16 +403,12 @@ const createVerification = async (
     ===================================================== */
 
     return res.status(400).json({
-
       success: false,
-
       message:
         "Video and document verification are not implemented yet.",
-
     });
 
   } catch (error) {
-
     console.error("");
     console.error(
       "Verification creation error:"
@@ -346,15 +416,12 @@ const createVerification = async (
 
     console.error(error);
 
-
     return res.status(500).json({
-
       success: false,
 
       message:
         error.message ||
         "Failed to create verification.",
-
     });
   }
 };
@@ -368,80 +435,66 @@ const getVerification = async (
   req,
   res
 ) => {
-
   try {
-
     const {
       verificationId,
     } = req.params;
 
-
     if (!verificationId) {
-
       return res.status(400).json({
-
         success: false,
-
         message:
           "Verification ID is required.",
-
       });
     }
 
+    const userId =
+      req.userId ||
+      "development-user";
+
 
     /* ===================================================
-       FIND VERIFICATION
+       USER-SPECIFIC VERIFICATION
     =================================================== */
 
     const verification =
       await Verification.findOne({
-
         verificationId,
-
+        userId,
       }).lean();
 
 
     if (!verification) {
-
       return res.status(404).json({
-
         success: false,
-
         message:
           "Verification not found.",
-
       });
     }
 
 
     return res.status(200).json({
-
       success: true,
 
       message:
         "Verification retrieved successfully.",
 
       verification,
-
     });
 
   } catch (error) {
-
     console.error(
       "Get verification error:"
     );
 
     console.error(error);
 
-
     return res.status(500).json({
-
       success: false,
 
       message:
         error.message ||
         "Failed to retrieve verification.",
-
     });
   }
 };
@@ -455,26 +508,10 @@ const getVerificationHistory = async (
   req,
   res
 ) => {
-
   try {
-
-    /*
-     * For now the project uses:
-     *
-     * req.userId
-     *
-     * If authentication middleware provides
-     * the Clerk user ID, that ID will be used.
-     *
-     * During development, we fall back to:
-     *
-     * development-user
-     */
-
     const userId =
       req.userId ||
       "development-user";
-
 
     console.log("");
     console.log(
@@ -487,15 +524,9 @@ const getVerificationHistory = async (
     );
 
 
-    /* ===================================================
-       GET USER VERIFICATIONS
-    =================================================== */
-
     const verifications =
       await Verification.find({
-
         userId,
-
       })
         .sort({
           createdAt: -1,
@@ -510,7 +541,6 @@ const getVerificationHistory = async (
 
 
     return res.status(200).json({
-
       success: true,
 
       message:
@@ -520,50 +550,87 @@ const getVerificationHistory = async (
         verifications.length,
 
       verifications,
-
     });
 
   } catch (error) {
-
     console.error(
       "Get verification history error:"
     );
 
     console.error(error);
 
-
     return res.status(500).json({
-
       success: false,
 
       message:
         error.message ||
         "Failed to retrieve verification history.",
-
     });
   }
 };
 
 
 /* =========================================================
-   GENERATE VERIFICATION ID
+   DELETE VERIFICATION HISTORY
 ========================================================= */
 
-const generateVerificationId = () => {
+const deleteVerificationHistory = async (
+  req,
+  res
+) => {
+  try {
+    const userId =
+      req.userId ||
+      "development-user";
 
-  const year =
-    new Date().getFullYear();
+    console.log("");
+    console.log(
+      "Deleting verification history..."
+    );
 
-
-  const randomNumber =
-    Math.floor(
-      1000 +
-      Math.random() *
-      9000
+    console.log(
+      "User ID:",
+      userId
     );
 
 
-  return `TL-${year}-${randomNumber}`;
+    const result =
+      await Verification.deleteMany({
+        userId,
+      });
+
+
+    console.log(
+      "History records deleted:",
+      result.deletedCount
+    );
+
+
+    return res.status(200).json({
+      success: true,
+
+      message:
+        "Verification history cleared successfully.",
+
+      deletedCount:
+        result.deletedCount || 0,
+    });
+
+  } catch (error) {
+    console.error(
+      "Delete verification history error:"
+    );
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error.message ||
+        "Failed to clear verification history.",
+    });
+  }
 };
 
 
@@ -575,4 +642,5 @@ module.exports = {
   createVerification,
   getVerification,
   getVerificationHistory,
+  deleteVerificationHistory,
 };
