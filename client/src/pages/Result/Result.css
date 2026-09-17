@@ -1062,3 +1062,34 @@
     transition: none;
   }
 }
+/* =========================================================
+   History Saving Disabled Banner
+   ========================================================= */
+
+.history-disabled-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  border: 1px solid #e9c46a;
+  border-radius: 8px;
+  background: #fdf6e3;
+  color: #6b5217;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.history-disabled-banner strong {
+  flex-basis: 100%;
+  font-size: 13.5px;
+}
+
+.history-disabled-banner a {
+  margin-left: auto;
+  color: #8a5a00;
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+}

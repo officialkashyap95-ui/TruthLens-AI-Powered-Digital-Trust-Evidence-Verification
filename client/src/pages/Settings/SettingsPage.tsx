@@ -16,6 +16,8 @@ import "./Settings.css";
 
 import {
   clearVerificationHistory,
+  getSettings,
+  updateSettings,
 } from "../../services/verificationService";
 
 
@@ -55,6 +57,34 @@ const SETTINGS_KEY = "truthlens-settings";
 
 
 /* =========================================================
+   INSTANT-PAINT CACHE
+
+   Reads the last-known settings from localStorage so the
+   page doesn't flash defaults while the real settings load
+   from the server. The server response always overwrites
+   this once it arrives.
+========================================================= */
+
+const readCachedSettings = (): SettingsState => {
+  try {
+    const cached =
+      localStorage.getItem(SETTINGS_KEY);
+
+    if (!cached) {
+      return DEFAULT_SETTINGS;
+    }
+
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(JSON.parse(cached) as Partial<SettingsState>),
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+};
+
+
+/* =========================================================
    SETTINGS PAGE
 ========================================================= */
 
@@ -68,7 +98,7 @@ export default function SettingsPage() {
 
   const [settings, setSettings] =
     useState<SettingsState>(
-      DEFAULT_SETTINGS
+      readCachedSettings
     );
 
 
@@ -87,34 +117,37 @@ export default function SettingsPage() {
 
 
   /* =======================================================
-     LOAD LOCAL SETTINGS
+     LOAD SETTINGS FROM THE SERVER
+
+     This is the source of truth. localStorage is kept
+     only as an instant-paint cache so the page doesn't
+     flash defaults while this request is in flight.
   ======================================================= */
 
   useEffect(() => {
-    const savedSettings =
-      localStorage.getItem(
-        SETTINGS_KEY
-      );
+    let cancelled = false;
 
-    if (!savedSettings) {
-      return;
-    }
+    getSettings()
+      .then((serverSettings) => {
+        if (cancelled) {
+          return;
+        }
 
-    try {
-      const parsedSettings =
-        JSON.parse(
-          savedSettings
-        ) as Partial<SettingsState>;
-
-      setSettings({
-        ...DEFAULT_SETTINGS,
-        ...parsedSettings,
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...serverSettings,
+        });
+      })
+      .catch((error) => {
+        console.error(
+          "[TruthLens] Failed to load settings from server, falling back to local cache:",
+          error
+        );
       });
-    } catch {
-      localStorage.removeItem(
-        SETTINGS_KEY
-      );
-    }
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
 
@@ -145,10 +178,35 @@ export default function SettingsPage() {
     key: K,
     value: SettingsState[K]
   ) => {
+    const previousValue =
+      settings[key];
+
+    /*
+     * Update immediately for a responsive UI...
+     */
     setSettings((current) => ({
       ...current,
       [key]: value,
     }));
+
+    /*
+     * ...then persist to the server, which is the
+     * actual source of truth read by verification
+     * creation (saveHistory) and other backend logic.
+     * If this fails, roll the UI back and surface it.
+     */
+    updateSettings({ [key]: value })
+      .catch((error) => {
+        console.error(
+          `[TruthLens] Failed to persist "${key}" to the server:`,
+          error
+        );
+
+        setSettings((current) => ({
+          ...current,
+          [key]: previousValue,
+        }));
+      });
   };
 
 
