@@ -575,6 +575,21 @@ export const createVerification = async (
       ) as VerificationResponse | null;
 
 
+    /*
+     * Always log the raw response so the actual
+     * server payload is visible in the browser
+     * console, regardless of which check below
+     * ends up failing.
+     */
+    console.log(
+      "[TruthLens] POST /api/verifications ->",
+      "status:",
+      response.status,
+      "body:",
+      result
+    );
+
+
     if (
       !response.ok ||
       !result?.success
@@ -587,13 +602,20 @@ export const createVerification = async (
 
 
     if (
-      result.verification
+      !result.verification
     ) {
-      result.verification =
-        normalizeVerification(
-          result.verification
-        );
+      throw new Error(
+        `Server responded successfully but the "verification" field was missing from the response. Raw response: ${JSON.stringify(
+          result
+        )}`
+      );
     }
+
+
+    result.verification =
+      normalizeVerification(
+        result.verification
+      );
 
 
     return result;

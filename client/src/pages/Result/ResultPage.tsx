@@ -2,9 +2,9 @@ import {
   useEffect,
   useState,
 } from "react";
-
+ 
 import { motion } from "framer-motion";
-
+ 
 import {
   ArrowLeft,
   CheckCircle2,
@@ -12,29 +12,30 @@ import {
   ShieldCheck,
   Loader2,
 } from "lucide-react";
-
+ 
 import {
   Link,
+  useLocation,
   useParams,
 } from "react-router-dom";
-
+ 
 import {
   getVerification,
   type Verification,
 } from "../../services/verificationService";
-
+ 
 import VerdictCard from "./components/VerdictCard";
 import ConfidenceScore from "./components/ConfidenceScore";
 import AnalysisSummary from "./components/AnalysisSummary";
 import EvidenceList from "./components/EvidenceList";
 import SubmittedContent from "./components/SubmittedContent";
 import VerificationDetails from "./components/VerificationDetails";
-
+ 
 import "./Result.css";
-
-
+ 
+ 
 export default function ResultPage() {
-
+ 
   /*
    * ========================================================
    * VERIFICATION ID
@@ -46,203 +47,233 @@ export default function ResultPage() {
    *
    * Therefore we read verificationId from the URL.
    */
-
+ 
   const {
     verificationId,
   } = useParams<{
     verificationId: string;
   }>();
-
-
+ 
+  /*
+   * ========================================================
+   * VERIFICATION PASSED FROM VERIFY PAGE
+   * ========================================================
+   *
+   * VerifyPage already has the full verification result
+   * from the create request. If it's available in router
+   * state, use it directly instead of re-fetching from the
+   * server. Falls back to a fetch below when this page is
+   * loaded directly (refresh, shared link, back button).
+   */
+ 
+  const location =
+    useLocation();
+ 
+  const stateVerification =
+    (
+      location.state as {
+        verification?: Verification;
+      } | null
+    )?.verification;
+ 
+ 
   /*
    * ========================================================
    * STATE
    * ========================================================
    */
-
+ 
   const [
     verification,
     setVerification,
   ] =
     useState<Verification | null>(
-      null
+      stateVerification || null
     );
-
+ 
   const [
     loading,
     setLoading,
   ] =
-    useState(true);
-
+    useState(!stateVerification);
+ 
   const [
     error,
     setError,
   ] =
     useState("");
-
-
+ 
+ 
   /*
    * ========================================================
    * FETCH VERIFICATION
    * ========================================================
    */
-
+ 
   useEffect(() => {
-
+ 
+    /*
+     * Already have the result from VerifyPage —
+     * no need to hit the server again.
+     */
+    if (stateVerification) {
+      return;
+    }
+ 
     const fetchVerification =
       async () => {
-
+ 
         if (!verificationId) {
-
+ 
           setError(
             "Verification ID is missing."
           );
-
+ 
           setLoading(false);
-
+ 
           return;
         }
-
+ 
         try {
-
+ 
           setLoading(true);
           setError("");
-
+ 
           const result =
             await getVerification(
               verificationId
             );
-
+ 
           console.log(
             "TruthLens verification result:",
             result
           );
-
+ 
           setVerification(
             result
           );
-
+ 
         } catch (err) {
-
+ 
           console.error(
             "Verification fetch error:",
             err
           );
-
+ 
           setError(
             err instanceof Error
               ? err.message
               : "Unable to load verification."
           );
-
+ 
         } finally {
-
+ 
           setLoading(false);
-
+ 
         }
       };
-
+ 
     fetchVerification();
-
-  }, [verificationId]);
-
-
+ 
+  }, [verificationId, stateVerification]);
+ 
+ 
   /*
    * ========================================================
    * LOADING STATE
    * ========================================================
    */
-
+ 
   if (loading) {
-
+ 
     return (
       <div className="result-page">
-
+ 
         <div className="result-loading">
-
+ 
           <Loader2
             className="result-loading-icon"
             size={32}
           />
-
+ 
           <h2>
             Loading verification...
           </h2>
-
+ 
           <p>
             TruthLens is retrieving
             your verification result.
           </p>
-
+ 
         </div>
-
+ 
       </div>
     );
   }
-
-
+ 
+ 
   /*
    * ========================================================
    * ERROR STATE
    * ========================================================
    */
-
+ 
   if (
     error ||
     !verification
   ) {
-
+ 
     return (
       <div className="result-page">
-
+ 
         <div className="result-error">
-
+ 
           <ShieldCheck
             size={36}
           />
-
+ 
           <h2>
             Unable to load verification
           </h2>
-
+ 
           <p>
             {error ||
               "The requested verification could not be found."}
           </p>
-
+ 
           <Link
             to="/verify"
             className="result-primary-action"
           >
-
+ 
             <ArrowLeft
               size={17}
             />
-
+ 
             Back to Verification
-
+ 
           </Link>
-
+ 
         </div>
-
+ 
       </div>
     );
   }
-
-
+ 
+ 
   /*
    * ========================================================
    * SAFE DATA EXTRACTION
    * ========================================================
    */
-
+ 
   const evidence =
     verification.evidence || [];
-
+ 
   const analysis =
     verification.analysis || [];
-
-
+ 
+ 
   /*
    * ========================================================
    * EVIDENCE QUALITY
@@ -261,18 +292,18 @@ export default function ResultPage() {
    * Otherwise we calculate a conservative fallback
    * from the evidence count.
    */
-
+ 
   const verificationData =
     verification as Verification & {
       evidenceQuality?: number;
-
+ 
       fusion?: {
         evidenceQuality?: number;
         forensicRisk?: number;
         visualRisk?: number | null;
         independentSignals?: number;
       };
-
+ 
       visualAnalysis?: {
         available?: boolean;
         manipulationScore?: number | null;
@@ -281,19 +312,19 @@ export default function ResultPage() {
         findings?: string[];
         evidenceQuality?: number;
       };
-
+ 
       riskScore?: number;
     };
-
-
+ 
+ 
   const backendEvidenceQuality =
     verificationData.fusion
       ?.evidenceQuality ??
     verificationData.evidenceQuality ??
     verificationData.visualAnalysis
       ?.evidenceQuality;
-
-
+ 
+ 
   const evidenceQuality =
     typeof backendEvidenceQuality ===
       "number"
@@ -312,121 +343,121 @@ export default function ResultPage() {
           evidence.length * 10
         )
       : 0;
-
-
+ 
+ 
   /*
    * ========================================================
    * EVIDENCE STRENGTH LABEL
    * ========================================================
    */
-
+ 
   const getEvidenceStrength =
     (
       quality: number
     ) => {
-
+ 
       if (quality >= 70) {
         return "Strong";
       }
-
+ 
       if (quality >= 45) {
         return "Moderate";
       }
-
+ 
       if (quality > 0) {
         return "Limited";
       }
-
+ 
       return "Unavailable";
     };
-
-
+ 
+ 
   const evidenceStrength =
     getEvidenceStrength(
       evidenceQuality
     );
-
-
+ 
+ 
   /*
    * ========================================================
    * SOURCE COUNT
    * ========================================================
    */
-
+ 
   const sourcesAnalyzed =
     verification.sourcesAnalyzed ??
     evidence.length;
-
-
+ 
+ 
   /*
    * ========================================================
    * RENDER
    * ========================================================
    */
-
+ 
   return (
     <div className="result-page">
-
+ 
       {/* =====================================================
           NAVIGATION
       ====================================================== */}
-
+ 
       <header className="result-nav">
-
+ 
         <div className="result-nav-inner">
-
+ 
           <Link
             to="/"
             className="result-brand"
           >
-
+ 
             <span className="result-brand-mark">
               TL
             </span>
-
+ 
             <span>
               TruthLens
             </span>
-
+ 
           </Link>
-
-
+ 
+ 
           <nav className="result-nav-links">
-
+ 
             <Link to="/dashboard">
               Dashboard
             </Link>
-
+ 
             <Link to="/verify">
               New Verification
             </Link>
-
+ 
           </nav>
-
-
+ 
+ 
           <Link
             to="/verify"
             className="result-nav-button"
           >
             Verify Content
           </Link>
-
+ 
         </div>
-
+ 
       </header>
-
-
+ 
+ 
       {/* =====================================================
           MAIN
       ====================================================== */}
-
+ 
       <main className="result-main">
-
-
+ 
+ 
         {/* ===================================================
             BACK
         ==================================================== */}
-
+ 
         <motion.div
           className="result-back"
           initial={{
@@ -441,24 +472,24 @@ export default function ResultPage() {
             duration: 0.3,
           }}
         >
-
+ 
           <Link to="/verify">
-
+ 
             <ArrowLeft
               size={15}
             />
-
+ 
             Back to verification
-
+ 
           </Link>
-
+ 
         </motion.div>
-
-
+ 
+ 
         {/* ===================================================
             HEADER
         ==================================================== */}
-
+ 
         <motion.section
           className="result-header"
           initial={{
@@ -473,41 +504,41 @@ export default function ResultPage() {
             duration: 0.45,
           }}
         >
-
+ 
           <span className="result-eyebrow">
             VERIFICATION RESULT
           </span>
-
-
+ 
+ 
           <h1>
             Verification Analysis
           </h1>
-
-
+ 
+ 
           <p>
             TruthLens analyzed the submitted
             content against available evidence
             and source signals.
           </p>
-
-
+ 
+ 
           <div className="result-completed">
-
+ 
             <CheckCircle2
               size={14}
             />
-
+ 
             Analysis completed
-
+ 
           </div>
-
+ 
         </motion.section>
-
-
+ 
+ 
         {/* ===================================================
             VERDICT
         ==================================================== */}
-
+ 
         <motion.section
           className="result-verdict-layout"
           initial={{
@@ -523,7 +554,7 @@ export default function ResultPage() {
             duration: 0.45,
           }}
         >
-
+ 
           <VerdictCard
             verdict={
               verification.verdict
@@ -532,275 +563,275 @@ export default function ResultPage() {
               verification.summary
             }
           />
-
-
+ 
+ 
           <ConfidenceScore
             confidence={
               verification.confidence
             }
           />
-
+ 
         </motion.section>
-
-
+ 
+ 
         {/* ===================================================
             SECTION 01
         ==================================================== */}
-
+ 
         <section className="result-section">
-
+ 
           <div className="result-section-heading">
-
+ 
             <span>
               01
             </span>
-
-
+ 
+ 
             <div>
-
+ 
               <h2>
                 Why TruthLens reached this verdict
               </h2>
-
+ 
               <p>
                 The result is based on
                 multiple verification signals
                 rather than a single AI prediction.
               </p>
-
+ 
             </div>
-
+ 
           </div>
-
-
+ 
+ 
           <AnalysisSummary
             items={analysis}
           />
-
+ 
         </section>
-
-
+ 
+ 
         {/* ===================================================
             SECTION 02
         ==================================================== */}
-
+ 
         <section className="result-section">
-
+ 
           <div className="result-section-heading">
-
+ 
             <span>
               02
             </span>
-
-
+ 
+ 
             <div>
-
+ 
               <h2>
                 Evidence &amp; Sources
               </h2>
-
+ 
               <p>
                 Review the evidence signals
                 used to produce this
                 verification result.
               </p>
-
+ 
             </div>
-
+ 
           </div>
-
-
+ 
+ 
           {/* =================================================
               EVIDENCE STRENGTH
           ================================================== */}
-
+ 
           <div className="evidence-strength">
-
+ 
             <div>
-
+ 
               <span>
                 Evidence Strength
               </span>
-
-
+ 
+ 
               <strong>
                 {evidenceStrength}
               </strong>
-
+ 
             </div>
-
-
+ 
+ 
             <div className="strength-bar">
-
+ 
               <span
                 style={{
                   width:
                     `${evidenceQuality}%`,
                 }}
               />
-
+ 
             </div>
-
-
+ 
+ 
             <div className="evidence-count">
-
+ 
               {sourcesAnalyzed}
-
+ 
               {" "}
-
+ 
               relevant sources analyzed
-
+ 
             </div>
-
+ 
           </div>
-
-
+ 
+ 
           {/* =================================================
               EVIDENCE LIST
           ================================================== */}
-
+ 
           {evidence.length > 0 ? (
-
+ 
             <EvidenceList
               evidence={evidence}
             />
-
+ 
           ) : (
-
+ 
             <div className="result-empty-evidence">
-
+ 
               <ShieldCheck
                 size={22}
               />
-
+ 
               <div>
-
+ 
                 <strong>
                   Evidence analysis is not available yet.
                 </strong>
-
+ 
                 <p>
                   The verification engine
                   did not return evidence
                   for this verification.
                 </p>
-
+ 
               </div>
-
+ 
             </div>
-
+ 
           )}
-
+ 
         </section>
-
-
+ 
+ 
         {/* ===================================================
             SECTION 03
         ==================================================== */}
-
+ 
         <section className="result-section">
-
+ 
           <div className="result-section-heading">
-
+ 
             <span>
               03
             </span>
-
-
+ 
+ 
             <div>
-
+ 
               <h2>
                 Submitted Content
               </h2>
-
+ 
               <p>
                 The original content submitted
                 for verification.
               </p>
-
+ 
             </div>
-
+ 
           </div>
-
-
+ 
+ 
           <SubmittedContent
             content={
               verification.content
             }
           />
-
+ 
         </section>
-
-
+ 
+ 
         {/* ===================================================
             SECTION 04
         ==================================================== */}
-
+ 
         <section className="result-section">
-
+ 
           <div className="result-section-heading">
-
+ 
             <span>
               04
             </span>
-
-
+ 
+ 
             <div>
-
+ 
               <h2>
                 Verification Details
               </h2>
-
+ 
               <p>
                 Technical information about
                 this analysis.
               </p>
-
+ 
             </div>
-
+ 
           </div>
-
-
+ 
+ 
           <VerificationDetails
             type={
               verification.type
             }
-
+ 
             sources={
               sourcesAnalyzed
             }
-
+ 
             processingTime={
               verification.processingTime ||
               "N/A"
             }
-
+ 
             verificationId={
               verification.verificationId
             }
           />
-
+ 
         </section>
-
-
+ 
+ 
         {/* ===================================================
             DISCLAIMER
         ==================================================== */}
-
+ 
         <section className="result-disclaimer">
-
+ 
           <ShieldCheck
             size={18}
           />
-
-
+ 
+ 
           <div>
-
+ 
             <strong>
               Evidence-based, not absolute.
             </strong>
-
-
+ 
+ 
             <p>
               TruthLens evaluates available
               evidence and source signals.
@@ -808,76 +839,76 @@ export default function ResultPage() {
               of the available evidence, not a
               guarantee of absolute truth.
             </p>
-
+ 
           </div>
-
+ 
         </section>
-
-
+ 
+ 
         {/* ===================================================
             ACTIONS
         ==================================================== */}
-
+ 
         <section className="result-actions">
-
+ 
           <Link
             to="/verify"
             className="result-primary-action"
           >
-
+ 
             <FileCheck2
               size={17}
             />
-
+ 
             New Verification
-
+ 
           </Link>
-
-
+ 
+ 
           <Link
             to="/dashboard"
             className="result-secondary-action"
           >
-
+ 
             Back to Dashboard
-
+ 
           </Link>
-
+ 
         </section>
-
+ 
       </main>
-
-
+ 
+ 
       {/* =====================================================
           FOOTER
       ====================================================== */}
-
+ 
       <footer className="result-footer">
-
+ 
         <span>
           TruthLens — Digital trust &
           evidence verification
         </span>
-
-
+ 
+ 
         <div>
-
+ 
           <Link to="/">
             About
           </Link>
-
+ 
           <Link to="/">
             Privacy
           </Link>
-
+ 
           <Link to="/">
             Terms
           </Link>
-
+ 
         </div>
-
+ 
       </footer>
-
+ 
     </div>
   );
 }
