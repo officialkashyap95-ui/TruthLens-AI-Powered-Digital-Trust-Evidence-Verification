@@ -648,14 +648,14 @@ const extractImageProperties = async (
 
       megapixels:
         info.width &&
-        info.height
+          info.height
           ? Number(
-              (
-                (info.width *
-                  info.height) /
-                1000000
-              ).toFixed(2)
-            )
+            (
+              (info.width *
+                info.height) /
+              1000000
+            ).toFixed(2)
+          )
           : 0,
     };
 
@@ -753,10 +753,10 @@ const validateImage = ({
     mimetype === "image/jpeg"
       ? "jpeg"
       : mimetype === "image/png"
-      ? "png"
-      : mimetype === "image/webp"
-      ? "webp"
-      : "";
+        ? "png"
+        : mimetype === "image/webp"
+          ? "webp"
+          : "";
 
 
   if (
@@ -1105,7 +1105,8 @@ const analyzeForensicSignals = ({
 ======================================================== */
 
 const normalizeVisionResult = (
-  visionResult
+  visionResult,
+  unavailableReason
 ) => {
 
   if (!visionResult) {
@@ -1141,7 +1142,9 @@ const normalizeVisionResult = (
       limitations: [],
 
       description:
-        "Visual AI analysis was unavailable.",
+        unavailableReason
+          ? `Visual AI analysis was unavailable: ${unavailableReason}`
+          : "Visual AI analysis was unavailable.",
 
       evidenceQuality:
         0,
@@ -1329,7 +1332,7 @@ const normalizeVisionResult = (
 
 
   switch (
-    classification
+  classification
   ) {
 
     case "AI_GENERATED":
@@ -1451,7 +1454,7 @@ const calculateForensicRisk = (
         return (
           total +
           score *
-            reliability
+          reliability
         );
       },
 
@@ -1495,7 +1498,7 @@ const calculateEvidenceQuality = ({
   if (
     structureSignal &&
     structureSignal.status ===
-      "normal"
+    "normal"
   ) {
 
     quality += 20;
@@ -1517,7 +1520,7 @@ const calculateEvidenceQuality = ({
   if (
     metadataSignal &&
     metadataSignal.status ===
-      "normal"
+    "normal"
   ) {
 
     quality += 15;
@@ -1544,16 +1547,42 @@ const calculateEvidenceQuality = ({
 
   /*
    * Visual AI
+   *
+   * Blend two signals instead of relying on
+   * indicator count alone:
+   *
+   * - evidenceQuality: how many concrete visual
+   *   indicators Gemini listed. Useful, but a
+   *   well-made synthetic image can legitimately
+   *   have very few visible "tells" even when
+   *   Gemini is genuinely confident about it.
+   *
+   * - vision.confidence: Gemini's own stated
+   *   confidence in its assessment. This is the
+   *   more direct signal and should not be
+   *   drowned out just because the image didn't
+   *   produce a long bullet list.
+   *
+   * Taking the max (rather than only the
+   * indicator count) means a high-confidence
+   * judgment from Gemini is no longer diluted
+   * down to near-zero just because the image is
+   * a clean, artifact-free fake.
    */
 
   if (
     vision.available
   ) {
 
+    const visionQuality =
+      Math.max(
+        vision.evidenceQuality,
+        vision.confidence
+      );
+
     quality +=
       Math.round(
-        vision.evidenceQuality *
-          0.35
+        visionQuality * 0.5
       );
   }
 
@@ -1588,9 +1617,9 @@ const calculateFusion = ({
 
   const manipulationRisk =
     vision.available &&
-    Number.isFinite(
-      vision.manipulationScore
-    )
+      Number.isFinite(
+        vision.manipulationScore
+      )
       ? vision.manipulationScore
       : null;
 
@@ -1601,9 +1630,9 @@ const calculateFusion = ({
 
   const aiGenerationRisk =
     vision.available &&
-    Number.isFinite(
-      vision.aiGeneratedScore
-    )
+      Number.isFinite(
+        vision.aiGeneratedScore
+      )
       ? vision.aiGeneratedScore
       : null;
 
@@ -1733,9 +1762,9 @@ const calculateFusion = ({
     forensicSignals.some(
       (signal) =>
         signal.name ===
-          "AI Generation Metadata" &&
+        "AI Generation Metadata" &&
         signal.status ===
-          "warning"
+        "warning"
     );
 
 
@@ -1800,7 +1829,7 @@ const calculateFusion = ({
 
   if (
     vision.verdict ===
-      "Insufficient Evidence"
+    "Insufficient Evidence"
   ) {
 
     confidence =
@@ -1850,9 +1879,9 @@ const calculateFusion = ({
         .filter(
           (signal) =>
             signal.status ===
-              "warning" ||
+            "warning" ||
             signal.status ===
-              "normal"
+            "normal"
         )
         .map(
           (signal) =>
@@ -1877,8 +1906,8 @@ const calculateFusion = ({
       visualRisk === null
         ? null
         : Math.round(
-            visualRisk
-          ),
+          visualRisk
+        ),
 
     manipulationRisk,
 
@@ -1910,9 +1939,9 @@ const determineVerdict = ({
     forensicSignals.some(
       (signal) =>
         signal.name ===
-          "AI Generation Metadata" &&
+        "AI Generation Metadata" &&
         signal.status ===
-          "warning"
+        "warning"
     );
 
 
@@ -1926,7 +1955,7 @@ const determineVerdict = ({
   const strongAiVision =
     vision.available &&
     vision.classification ===
-      "AI_GENERATED" &&
+    "AI_GENERATED" &&
     vision.aiGeneratedScore !== null &&
     vision.aiGeneratedScore >= 70 &&
     vision.confidence >= 65;
@@ -2078,6 +2107,60 @@ const determineVerdict = ({
 
   /*
    * ------------------------------------------------------
+   * MODERATE AI-GENERATION SIGNAL
+   *
+   * A clean, well-made synthetic image often gives
+   * Gemini genuinely little to list as concrete
+   * "indicators" — that's not the same as weak
+   * evidence. If Gemini is reasonably confident and
+   * leans toward AI-generated/manipulated but the
+   * stricter "Suspicious" bar above isn't cleared
+   * (usually because riskScore/confidence are pulled
+   * down by clean forensics, e.g. no EXIF left after
+   * a download+re-upload), this tier still surfaces
+   * that signal honestly instead of discarding it
+   * into an unhelpful "Unverified".
+   * ------------------------------------------------------
+   */
+
+  const moderateAiSignal =
+    vision.available &&
+    vision.classification ===
+    "AI_GENERATED" &&
+    vision.aiGeneratedScore !== null &&
+    vision.aiGeneratedScore >= 55 &&
+    vision.confidence >= 50;
+
+  const moderateManipulationSignal =
+    vision.available &&
+    vision.manipulationScore !== null &&
+    vision.manipulationScore >= 55 &&
+    vision.confidence >= 50;
+
+  if (
+    moderateAiSignal ||
+    moderateManipulationSignal
+  ) {
+
+    return {
+
+      verdict:
+        "Possibly AI-Generated / Manipulated",
+
+      label:
+        "POSSIBLY AI-GENERATED / MANIPULATED",
+
+      summary:
+        "Visual AI analysis found a moderate signal consistent with AI generation or manipulation, but it did not reach the confidence threshold TruthLens requires for a stronger verdict. This is a real, meaningful signal, not a confirmed conclusion.",
+
+      recommendation:
+        "Treat the image as possibly synthetic or altered. Verify the original source before relying on it.",
+    };
+  }
+
+
+  /*
+   * ------------------------------------------------------
    * UNVERIFIED
    * ------------------------------------------------------
    */
@@ -2126,23 +2209,20 @@ const buildAnalysis = ({
     description:
       vision.available
 
-        ? `Gemini Vision estimated manipulation risk at ${
-            vision.manipulationScore === null
-              ? "unknown"
-              : vision.manipulationScore
-          }/100 and AI-generation likelihood at ${
-            vision.aiGeneratedScore === null
-              ? "unknown"
-              : vision.aiGeneratedScore
-          }/100 with ${
-            Math.round(
-              vision.confidence
-            )
-          }% model confidence. Classification: ${
-            vision.classification
-          }.`
+        ? `Gemini Vision estimated manipulation risk at ${vision.manipulationScore === null
+          ? "unknown"
+          : vision.manipulationScore
+        }/100 and AI-generation likelihood at ${vision.aiGeneratedScore === null
+          ? "unknown"
+          : vision.aiGeneratedScore
+        }/100 with ${Math.round(
+          vision.confidence
+        )
+        }% model confidence. Classification: ${vision.classification
+        }.`
 
-        : "Visual AI analysis was unavailable.",
+        : vision.description ||
+        "Visual AI analysis was unavailable.",
   });
 
 
@@ -2156,14 +2236,10 @@ const buildAnalysis = ({
       "File Analysis",
 
     description:
-      `The uploaded ${metadata.format.toUpperCase()} image is ${
-        properties.width
-      } × ${
-        properties.height
-      } pixels (${
-        properties.megapixels
-      } MP) and ${
-        metadata.sizeMB
+      `The uploaded ${metadata.format.toUpperCase()} image is ${properties.width
+      } × ${properties.height
+      } pixels (${properties.megapixels
+      } MP) and ${metadata.sizeMB
       } MB.`,
   });
 
@@ -2342,22 +2418,17 @@ const buildEvidence = ({
         "image-vision-analysis",
 
       description:
-        `Visual analysis estimated manipulation risk at ${
-          vision.manipulationScore === null
-            ? "unknown"
-            : vision.manipulationScore
-        }/100 and AI-generation likelihood at ${
-          vision.aiGeneratedScore === null
-            ? "unknown"
-            : vision.aiGeneratedScore
-        }/100 with ${
-          Math.round(
-            vision.confidence
-          )
-        }% model confidence. Classification: ${
-          vision.classification
-        }. ${
-          vision.description
+        `Visual analysis estimated manipulation risk at ${vision.manipulationScore === null
+          ? "unknown"
+          : vision.manipulationScore
+        }/100 and AI-generation likelihood at ${vision.aiGeneratedScore === null
+          ? "unknown"
+          : vision.aiGeneratedScore
+        }/100 with ${Math.round(
+          vision.confidence
+        )
+        }% model confidence. Classification: ${vision.classification
+        }. ${vision.description
         }`,
 
       url:
@@ -2412,10 +2483,8 @@ const buildEvidence = ({
       "local-file-analysis",
 
     description:
-      `Valid ${metadata.format.toUpperCase()} image structure detected at ${
-        properties.width
-      } × ${
-        properties.height
+      `Valid ${metadata.format.toUpperCase()} image structure detected at ${properties.width
+      } × ${properties.height
       } pixels.`,
 
     url:
@@ -2558,16 +2627,13 @@ const buildEvidence = ({
       "truthlens-fusion-engine",
 
     description:
-      `TruthLens combined forensic risk (${fusion.forensicRisk}/100), visual risk (${
-        fusion.visualRisk === null
-          ? "unavailable"
-          : `${fusion.visualRisk}/100`
-      }), AI-generation risk (${
-        fusion.aiGenerationRisk === null
-          ? "unavailable"
-          : `${fusion.aiGenerationRisk}/100`
-      }), and evidence quality (${
-        fusion.evidenceQuality
+      `TruthLens combined forensic risk (${fusion.forensicRisk}/100), visual risk (${fusion.visualRisk === null
+        ? "unavailable"
+        : `${fusion.visualRisk}/100`
+      }), AI-generation risk (${fusion.aiGenerationRisk === null
+        ? "unavailable"
+        : `${fusion.aiGenerationRisk}/100`
+      }), and evidence quality (${fusion.evidenceQuality
       }/100) to produce the final assessment.`,
 
     url:
@@ -2672,7 +2738,7 @@ const analyzeImage = async ({
   console.log(
     "[Image] AI metadata:",
     metadata.aiGenerator ||
-      "none"
+    "none"
   );
 
 
@@ -2713,11 +2779,15 @@ const analyzeImage = async ({
   let visionResult =
     null;
 
+  let visionUnavailableReason =
+    null;
 
-  if (
-    typeof analyzeVision ===
-    "function"
-  ) {
+
+  if (typeof analyzeVision === "function") {
+
+    console.log(
+      "[Image] Gemini Vision function supplied."
+    );
 
     try {
 
@@ -2731,6 +2801,8 @@ const analyzeImage = async ({
           buffer,
           mimetype,
           originalname,
+          metadata,
+          forensicSignals,
         });
 
 
@@ -2744,6 +2816,10 @@ const analyzeImage = async ({
         "[Image] Gemini Vision failed:",
         error.message
       );
+
+      visionUnavailableReason =
+        error?.message ||
+        "Unknown error.";
     }
 
   } else {
@@ -2751,12 +2827,16 @@ const analyzeImage = async ({
     console.log(
       "[Image] Gemini Vision function was not supplied."
     );
+
+    visionUnavailableReason =
+      "Gemini Vision was not configured on the server.";
   }
 
 
   const vision =
     normalizeVisionResult(
-      visionResult
+      visionResult,
+      visionUnavailableReason
     );
 
 

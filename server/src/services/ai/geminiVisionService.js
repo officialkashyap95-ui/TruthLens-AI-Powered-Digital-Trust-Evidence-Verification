@@ -1,149 +1,239 @@
+const Groq = require("groq-sdk");
 const { GoogleGenAI } = require("@google/genai");
 
 /*
-=========================================================
-TRUTHLENS GEMINI VISION SERVICE
-
-Purpose:
-- Analyze actual image pixels
-- Detect visual indicators of AI generation
-- Detect visual indicators of manipulation
-- Identify visual characteristics consistent with
-  authentic photography
-- Produce structured evidence for the TruthLens
-  Evidence Fusion Engine
-
-IMPORTANT:
-This service is a visual evidence generator.
-
-It is NOT a mathematically certain AI-image detector.
-
-The final TruthLens verdict must be produced by the
-Evidence Fusion Engine, not by Gemini alone.
-=========================================================
+|--------------------------------------------------------------------------
+| TruthLens Vision AI Provider Router
+|--------------------------------------------------------------------------
+|
+| Provider order:
+|
+|   1. Groq Qwen 3.6 / 3.8
+|   2. OpenRouter Free
+|   3. Gemini 3.6 Flash
+|
+| The exported function name intentionally remains:
+|
+|   analyzeImageWithGeminiVision
+|
+| so the existing verificationController.js does not need to change.
+|
+|--------------------------------------------------------------------------
 */
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
 
-const MODEL = "gemini-3.7-flash";
+const GROQ_MODELS = [
+  "qwen/qwen3.6-27b",
+  "qwen/qwen3.8-27b",
+];
 
-/* =========================================================
-   SCORE LIMITS
-========================================================= */
+const OPENROUTER_MODEL = "openrouter/free";
 
-const MIN_SCORE = 0;
-const MAX_SCORE = 100;
+const GEMINI_MODEL = "gemini-3.6-flash";
 
-/* =========================================================
-   RESPONSE SCHEMA
-========================================================= */
+const OPENROUTER_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
 
-const VISION_SCHEMA = {
-  type: "object",
 
-  properties: {
-    classification: {
-      type: "string",
+// ============================================================================
+// CLIENTS
+// ============================================================================
 
-      enum: [
-        "AI_GENERATED",
-        "LIKELY_MANIPULATED",
-        "LIKELY_AUTHENTIC",
-        "UNVERIFIED",
-      ],
-    },
+const groq =
+  process.env.GROQ_API_KEY
+    ? new Groq({
+        apiKey: process.env.GROQ_API_KEY,
+      })
+    : null;
 
-    aiGeneratedScore: {
-      type: "number",
-      minimum: 0,
-      maximum: 100,
-    },
+const gemini =
+  process.env.GEMINI_API_KEY
+    ? new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+      })
+    : null;
 
-    manipulationScore: {
-      type: "number",
-      minimum: 0,
-      maximum: 100,
-    },
 
-    visualAuthenticityScore: {
-      type: "number",
-      minimum: 0,
-      maximum: 100,
-    },
+// ============================================================================
+// VISION PROMPT
+// ============================================================================
 
-    confidence: {
-      type: "number",
-      minimum: 0,
-      maximum: 100,
-    },
+const VISION_PROMPT = `
+You are the visual-analysis component of TruthLens,
+an evidence-verification system.
 
-    summary: {
-      type: "string",
-    },
+Analyze the supplied image carefully.
 
-    visualIndicators: {
-      type: "array",
+Your job is NOT to blindly declare an image AI-generated.
 
-      items: {
-        type: "string",
-      },
-    },
+Instead, examine visible evidence such as:
 
-    manipulationIndicators: {
-      type: "array",
+1. AI-generation indicators
+   - unnatural textures
+   - distorted objects
+   - malformed text
+   - inconsistent details
+   - strange hands/fingers
+   - repeated patterns
+   - unnatural lighting
+   - inconsistent reflections
+   - impossible geometry
+   - synthetic-looking facial details
+   - unusual background structures
 
-      items: {
-        type: "string",
-      },
-    },
+2. Image-manipulation indicators
+   - visible editing artifacts
+   - inconsistent edges
+   - cloning/repetition
+   - pasted objects
+   - inconsistent lighting
+   - inconsistent shadows
+   - warped regions
+   - blending artifacts
+   - suspicious local regions
 
-    authenticityIndicators: {
-      type: "array",
+3. Authenticity indicators
+   - coherent lighting
+   - consistent geometry
+   - natural textures
+   - physically plausible shadows
+   - consistent perspective
+   - coherent details
 
-      items: {
-        type: "string",
-      },
-    },
+4. Uncertainty
+   - limitations caused by image resolution
+   - inability to inspect source history
+   - inability to prove provenance from pixels alone
+   - ambiguous visual evidence
 
-    uncertaintyFactors: {
-      type: "array",
+IMPORTANT:
 
-      items: {
-        type: "string",
-      },
-    },
+Do not use the filename as evidence.
 
-    limitations: {
-      type: "array",
+Do not assume an image is AI-generated simply because it looks polished.
 
-      items: {
-        type: "string",
-      },
-    },
-  },
+Do not claim certainty when visual evidence is insufficient.
 
-  required: [
-    "classification",
-    "aiGeneratedScore",
-    "manipulationScore",
-    "visualAuthenticityScore",
-    "confidence",
-    "summary",
-    "visualIndicators",
-    "manipulationIndicators",
-    "authenticityIndicators",
-    "uncertaintyFactors",
-    "limitations",
-  ],
-};
+Return ONLY a JSON object.
 
-/* =========================================================
-   CLAMP NUMBER
-========================================================= */
+Use exactly this structure:
 
-const clamp = (value) => {
+{
+  "classification": "AI_GENERATED | LIKELY_MANIPULATED | LIKELY_AUTHENTIC | UNVERIFIED",
+  "aiGeneratedScore": 0,
+  "manipulationScore": 0,
+  "visualAuthenticityScore": 0,
+  "confidence": 0,
+  "summary": "",
+  "visualIndicators": [],
+  "manipulationIndicators": [],
+  "authenticityIndicators": [],
+  "uncertaintyFactors": [],
+  "limitations": []
+}
+
+Scoring:
+
+aiGeneratedScore:
+0 = no meaningful visible evidence
+100 = very strong visible evidence of AI generation
+
+manipulationScore:
+0 = no meaningful manipulation evidence
+100 = very strong visible evidence of manipulation
+
+visualAuthenticityScore:
+0 = no meaningful authenticity evidence
+100 = strong visible consistency with an authentic image
+
+confidence:
+0 = essentially no confidence
+100 = very high confidence
+
+Use integers from 0 to 100.
+
+Be conservative.
+
+Pixel-level visual analysis cannot establish provenance with certainty.
+`;
+
+
+// ============================================================================
+// GENERIC HELPERS
+// ============================================================================
+
+function safeString(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value);
+}
+
+
+// ----------------------------------------------------------------------------
+// Remove markdown code fences and extract JSON
+// ----------------------------------------------------------------------------
+
+function parseVisionJson(rawText) {
+  if (!rawText) {
+    throw new Error("Vision provider returned an empty response.");
+  }
+
+  let text = safeString(rawText).trim();
+
+  // Remove markdown code fences.
+  text = text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  // First attempt: entire response is JSON.
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    // Continue to extraction below.
+  }
+
+  // Second attempt:
+  // Find the first { and last }.
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+
+  if (
+    firstBrace !== -1 &&
+    lastBrace !== -1 &&
+    lastBrace > firstBrace
+  ) {
+    const possibleJson = text.slice(
+      firstBrace,
+      lastBrace + 1
+    );
+
+    try {
+      return JSON.parse(possibleJson);
+    } catch (error) {
+      throw new Error(
+        "Vision provider returned invalid JSON."
+      );
+    }
+  }
+
+  throw new Error(
+    "Vision provider returned a response that could not be parsed as JSON."
+  );
+}
+
+
+// ----------------------------------------------------------------------------
+// Clamp number between 0 and 100
+// ----------------------------------------------------------------------------
+
+function clampScore(value) {
   const number = Number(value);
 
   if (!Number.isFinite(number)) {
@@ -151,778 +241,621 @@ const clamp = (value) => {
   }
 
   return Math.max(
-    MIN_SCORE,
-    Math.min(
-      MAX_SCORE,
-      Math.round(number)
-    )
+    0,
+    Math.min(100, Math.round(number))
   );
-};
+}
 
-/* =========================================================
-   CLEAN STRING ARRAY
-========================================================= */
 
-const cleanStringArray = (
-  value,
-  maxItems = 8
-) => {
+// ----------------------------------------------------------------------------
+// Normalize arrays
+// ----------------------------------------------------------------------------
+
+function normalizeArray(value) {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .filter(
-      (item) =>
-        typeof item === "string" &&
-        item.trim().length > 0
+    .map((item) => safeString(item).trim())
+    .filter(Boolean);
+}
+
+
+// ----------------------------------------------------------------------------
+// Normalize provider response
+// ----------------------------------------------------------------------------
+
+function normalizeProviderResult(result) {
+  if (!result || typeof result !== "object") {
+    throw new Error(
+      "Vision provider returned an invalid object."
+    );
+  }
+
+  const validClassifications = [
+    "AI_GENERATED",
+    "LIKELY_MANIPULATED",
+    "LIKELY_AUTHENTIC",
+    "UNVERIFIED",
+  ];
+
+  const classification =
+    validClassifications.includes(
+      result.classification
     )
-    .map((item) => item.trim())
-    .slice(0, maxItems);
-};
+      ? result.classification
+      : "UNVERIFIED";
 
-/* =========================================================
-   NORMALIZE RESULT
-========================================================= */
+  return {
+    classification,
 
-const normalizeResult = (result) => {
-  const normalized = {
-    classification:
-      [
-        "AI_GENERATED",
-        "LIKELY_MANIPULATED",
-        "LIKELY_AUTHENTIC",
-        "UNVERIFIED",
-      ].includes(
-        result?.classification
-      )
-        ? result.classification
-        : "UNVERIFIED",
+    aiGeneratedScore: clampScore(
+      result.aiGeneratedScore
+    ),
 
-    aiGeneratedScore:
-      clamp(
-        result?.aiGeneratedScore
-      ),
+    manipulationScore: clampScore(
+      result.manipulationScore
+    ),
 
-    manipulationScore:
-      clamp(
-        result?.manipulationScore
-      ),
+    visualAuthenticityScore: clampScore(
+      result.visualAuthenticityScore
+    ),
 
-    visualAuthenticityScore:
-      clamp(
-        result?.visualAuthenticityScore
-      ),
-
-    confidence:
-      clamp(
-        result?.confidence
-      ),
+    confidence: clampScore(
+      result.confidence
+    ),
 
     summary:
-      typeof result?.summary ===
-      "string"
-        ? result.summary.trim()
-        : "The visual model could not establish a reliable conclusion.",
+      safeString(result.summary).trim() ||
+      "Visual analysis completed.",
 
-    visualIndicators:
-      cleanStringArray(
-        result?.visualIndicators
-      ),
+    visualIndicators: normalizeArray(
+      result.visualIndicators
+    ),
 
-    manipulationIndicators:
-      cleanStringArray(
-        result?.manipulationIndicators
-      ),
+    manipulationIndicators: normalizeArray(
+      result.manipulationIndicators
+    ),
 
-    authenticityIndicators:
-      cleanStringArray(
-        result?.authenticityIndicators
-      ),
+    authenticityIndicators: normalizeArray(
+      result.authenticityIndicators
+    ),
 
-    uncertaintyFactors:
-      cleanStringArray(
-        result?.uncertaintyFactors
-      ),
+    uncertaintyFactors: normalizeArray(
+      result.uncertaintyFactors
+    ),
 
-    limitations:
-      cleanStringArray(
-        result?.limitations
-      ),
+    limitations: normalizeArray(
+      result.limitations
+    ),
   };
+}
 
-  /*
-   * Calculate how much visual evidence
-   * actually exists.
-   *
-   * This is NOT the authenticity score.
-   *
-   * It measures the amount of explainable
-   * visual evidence returned by the model.
-   */
 
-  const evidenceCount =
-    normalized.visualIndicators.length +
-    normalized.manipulationIndicators.length +
-    normalized.authenticityIndicators.length;
+// ----------------------------------------------------------------------------
+// Extract text from OpenRouter response
+// ----------------------------------------------------------------------------
 
-  normalized.evidenceCount =
-    evidenceCount;
+function extractOpenRouterText(data) {
+  const content =
+    data?.choices?.[0]?.message?.content;
 
-  /*
-   * Evidence quality:
-   *
-   * More concrete observations = better
-   * explainability.
-   *
-   * This does NOT mean the image is real/fake.
-   */
+  if (typeof content === "string") {
+    return content;
+  }
 
-  normalized.evidenceQuality =
-    Math.min(
-      100,
-      evidenceCount * 12
+  // Some providers may return content as an array.
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+
+        if (part?.type === "text") {
+          return part.text || "";
+        }
+
+        return "";
+      })
+      .join("\n");
+  }
+
+  return "";
+}
+
+
+// ----------------------------------------------------------------------------
+// Convert image buffer to data URL
+// ----------------------------------------------------------------------------
+
+function createImageDataUrl(buffer, mimetype) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new Error(
+      "Image buffer is missing or invalid."
     );
-
-  /*
-   * Prevent contradictory model output
-   * from producing obviously impossible
-   * combinations.
-   */
-
-  if (
-    normalized.classification ===
-      "AI_GENERATED" &&
-    normalized.aiGeneratedScore <
-      60
-  ) {
-    normalized.classification =
-      "UNVERIFIED";
   }
 
-  if (
-    normalized.classification ===
-      "LIKELY_MANIPULATED" &&
-    normalized.manipulationScore <
-      50
-  ) {
-    normalized.classification =
-      "UNVERIFIED";
+  if (!mimetype) {
+    throw new Error(
+      "Image MIME type is missing."
+    );
   }
 
-  if (
-    normalized.classification ===
-      "LIKELY_AUTHENTIC" &&
-    normalized.visualAuthenticityScore <
-      55
-  ) {
-    normalized.classification =
-      "UNVERIFIED";
-  }
-
-  return normalized;
-};
-
-/* =========================================================
-   BUILD FORENSIC CONTEXT
-========================================================= */
-
-const buildForensicContext = ({
-  metadata,
-  forensicSignals,
-}) => {
-  return JSON.stringify(
-    {
-      metadata:
-        metadata || {},
-
-      forensicSignals:
-        Array.isArray(
-          forensicSignals
-        )
-          ? forensicSignals
-          : [],
-    },
-    null,
-    2
+  return (
+    `data:${mimetype};base64,` +
+    buffer.toString("base64")
   );
-};
-
-/* =========================================================
-   BUILD PROMPT
-========================================================= */
-
-const buildPrompt = ({
-  forensicContext,
-}) => {
-  return `
-You are the visual evidence analysis engine inside TruthLens.
-
-TruthLens is a digital trust and evidence verification platform.
-
-Your task is to analyze the ACTUAL IMAGE PIXELS supplied with this request.
-
-You are NOT the final TruthLens verdict engine.
-
-You are one evidence-producing layer inside a larger Evidence Fusion Engine.
-
-=========================================================
-PRIMARY TASK
-=========================================================
-
-Evaluate the image for three separate dimensions:
-
-A. AI-GENERATION INDICATORS
-
-Determine whether the visible image contains characteristics
-commonly associated with AI-generated imagery.
-
-B. DIGITAL MANIPULATION INDICATORS
-
-Determine whether the visible image contains characteristics
-consistent with editing, compositing, cloning, object insertion,
-object removal, retouching, or other digital manipulation.
-
-C. VISUAL AUTHENTICITY INDICATORS
-
-Determine whether the visible image has characteristics
-consistent with an ordinary photograph.
-
-IMPORTANT:
-
-These are separate dimensions.
-
-An image can be:
-
-- AI-generated without being conventionally "edited"
-- a real photograph that was digitally manipulated
-- a real photograph that was resized or compressed
-- an authentic photograph with metadata removed
-- impossible to classify confidently
-
-=========================================================
-DO NOT MAKE THESE ERRORS
-=========================================================
-
-Never claim:
-
-- 100% authentic
-- 100% fake
-- absolute proof of AI generation
-- absolute proof of manipulation
-
-Do NOT treat:
-
-- missing EXIF as proof of AI generation
-- missing metadata as proof of manipulation
-- JPEG compression as proof of manipulation
-- high resolution as proof of authenticity
-- low resolution as proof of manipulation
-- filename as evidence
-- file extension as evidence
-- image quality alone as evidence
-- beauty/photorealism alone as evidence
-
-Do NOT invent:
-
-- image source
-- photographer
-- location
-- date
-- camera
-- website
-- provenance
-- external evidence
-
-Only analyze what can reasonably be observed from the image.
-
-=========================================================
-AI-GENERATION INDICATORS
-=========================================================
-
-Look carefully for:
-
-1. Object geometry inconsistencies
-2. Impossible or unusual object structure
-3. Repeated textures
-4. Repeated background patterns
-5. Unnatural fine details
-6. Synthetic-looking texture
-7. Physically inconsistent reflections
-8. Physically inconsistent shadows
-9. Lighting inconsistencies
-10. Perspective inconsistencies
-11. Depth inconsistencies
-12. Strange object boundaries
-13. Distorted text or symbols
-14. Unnatural hair/fur
-15. Unnatural hands/fingers
-16. Anatomical inconsistencies
-17. Objects merging together
-18. Impossible small details
-19. Repeating environmental elements
-20. Inconsistent photographic noise
-
-IMPORTANT:
-
-Do not report an indicator unless it is actually visible.
-
-=========================================================
-MANIPULATION INDICATORS
-=========================================================
-
-Look for:
-
-1. Visible compositing
-2. Pasted objects
-3. Object removal artifacts
-4. Clone/repeated regions
-5. Mismatched sharpness
-6. Local blur anomalies
-7. Inconsistent noise
-8. Inconsistent grain
-9. Different lighting between regions
-10. Different perspective between regions
-11. Suspicious boundaries
-12. Haloing
-13. Edge artifacts
-14. Local compression differences
-15. Impossible shadows caused by editing
-16. Inconsistent reflections
-
-Again:
-
-Only report visible indicators.
-
-=========================================================
-AUTHENTICITY INDICATORS
-=========================================================
-
-Look for:
-
-1. Coherent lighting
-2. Physically plausible shadows
-3. Consistent perspective
-4. Consistent depth
-5. Natural texture variation
-6. Consistent photographic noise
-7. Natural object boundaries
-8. Plausible reflections
-9. Consistent focus behavior
-10. Natural environmental detail
-
-These indicators support the possibility of a normal photograph.
-
-They do NOT prove authenticity.
-
-=========================================================
-IMPORTANT DISTINCTION
-=========================================================
-
-AI-GENERATED SCORE:
-
-0
-means no meaningful visual indication of AI generation.
-
-100
-means very strong visible evidence consistent with AI generation.
-
-MANIPULATION SCORE:
-
-0
-means no meaningful visual indication of digital manipulation.
-
-100
-means very strong visible evidence consistent with manipulation.
-
-VISUAL AUTHENTICITY SCORE:
-
-0
-means little visual evidence consistent with an ordinary photograph.
-
-100
-means strong visual characteristics consistent with an ordinary photograph.
-
-CONFIDENCE:
-
-This measures how confident YOU are in the visual assessment.
-
-Do NOT automatically use high confidence.
-
-Use lower confidence when:
-
-- the image is low resolution
-- the image is heavily compressed
-- visual details are ambiguous
-- the image contains little texture
-- the suspected artifact is very subtle
-- there are conflicting signals
-- the evidence is weak
-
-=========================================================
-CLASSIFICATION RULES
-=========================================================
-
-Use:
-
-AI_GENERATED
-
-ONLY when there are multiple reasonably visible characteristics
-consistent with AI generation.
-
-As a guideline, AI_GENERATED normally requires:
-
-- aiGeneratedScore >= 70
-- multiple concrete visual indicators
-- confidence preferably >= 55
-
-Use:
-
-LIKELY_MANIPULATED
-
-when visible evidence suggests editing or compositing.
-
-As a guideline:
-
-- manipulationScore >= 60
-- at least one or more concrete manipulation indicators
-
-Use:
-
-LIKELY_AUTHENTIC
-
-ONLY when the image has strong coherent photographic characteristics
-and there are no meaningful visible AI/manipulation indicators.
-
-Do NOT use LIKELY_AUTHENTIC merely because you cannot find evidence of fakery.
-
-Use:
-
-UNVERIFIED
-
-when the evidence is ambiguous, weak, contradictory, or insufficient.
-
-=========================================================
-VERY IMPORTANT FOR AI-GENERATED IMAGES
-=========================================================
-
-An AI-generated image does not necessarily contain obvious
-"editing artifacts".
-
-Therefore:
-
-If the image appears synthetically generated because of
-multiple coherent visual indicators, report those indicators
-under visualIndicators and increase aiGeneratedScore.
-
-Do NOT lower aiGeneratedScore merely because:
-
-- there is no EXIF
-- there is no Photoshop metadata
-- the image is technically valid
-- the image looks photorealistic
-
-=========================================================
-LOCAL FORENSIC CONTEXT
-=========================================================
-
-The following information comes from TruthLens's local
-file-analysis layer.
-
-Treat it only as contextual evidence.
-
-Do NOT allow metadata alone to determine the visual classification.
-
-${forensicContext}
-
-=========================================================
-OUTPUT REQUIREMENTS
-=========================================================
-
-Return ONLY JSON matching the supplied schema.
-
-Every indicator should be concise and explain what was observed.
-
-Avoid generic statements such as:
-
-"Looks AI-generated."
-
-Instead use observations such as:
-
-"The fine texture of the grass contains repeated patterns that remain unusually similar across nearby regions."
-
-Only make such a statement if the feature is actually visible.
-
-=========================================================
-FINAL PRINCIPLE
-=========================================================
-
-TruthLens does not ask:
-
-"Is this definitely real?"
-
-TruthLens asks:
-
-"What evidence in the image supports AI generation,
-manipulation, or ordinary photographic origin,
-and how strong is that evidence?"
-
-Be conservative, specific, explainable and evidence-based.
-`;
-};
-
-/* =========================================================
-   MAIN GEMINI VISION ANALYSIS
-========================================================= */
-
-const analyzeImageWithGeminiVision =
-  async ({
-    buffer,
-    mimetype,
-    metadata = {},
-    forensicSignals = [],
-  }) => {
-    /*
-     * API KEY CHECK
-     */
-
-    if (
-      !process.env.GEMINI_API_KEY
-    ) {
-      throw new Error(
-        "GEMINI_API_KEY is not configured."
-      );
-    }
-
-    /*
-     * BUFFER CHECK
-     */
-
-    if (
-      !Buffer.isBuffer(buffer) ||
-      buffer.length === 0
-    ) {
-      throw new Error(
-        "Invalid image buffer supplied to Gemini Vision."
-      );
-    }
-
-    /*
-     * MIME CHECK
-     */
-
-    const supportedMimeTypes =
-      new Set([
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-      ]);
-
-    if (
-      !supportedMimeTypes.has(
-        mimetype
-      )
-    ) {
-      throw new Error(
-        `Unsupported image MIME type for Gemini Vision: ${mimetype}`
-      );
-    }
-
-    /*
-     * BASE64 IMAGE
-     */
-
-    const base64Image =
-      buffer.toString(
-        "base64"
-      );
-
-    /*
-     * FORENSIC CONTEXT
-     */
-
-    const forensicContext =
-      buildForensicContext({
-        metadata,
-        forensicSignals,
-      });
-
-    /*
-     * PROMPT
-     */
-
-    const prompt =
-      buildPrompt({
-        forensicContext,
-      });
-
-    console.log(
-      "[Gemini Vision] Starting visual analysis..."
+}
+
+
+// ============================================================================
+// GROQ VISION
+// ============================================================================
+
+async function analyzeWithGroqVision({
+  buffer,
+  mimetype,
+  originalname,
+}) {
+  if (!groq) {
+    throw new Error(
+      "GROQ_API_KEY is not configured."
     );
+  }
 
-    console.log(
-      "[Gemini Vision] Model:",
-      MODEL
-    );
-
-    console.log(
-      "[Gemini Vision] MIME:",
+  const imageDataUrl =
+    createImageDataUrl(
+      buffer,
       mimetype
     );
 
-    console.log(
-      "[Gemini Vision] Image size:",
-      buffer.length,
-      "bytes"
+  const errors = [];
+
+  console.log(
+    `[Vision] Image: ${originalname || "unknown"}`
+  );
+
+  console.log(
+    `[Vision] Size: ${buffer.length} bytes`
+  );
+
+  for (const model of GROQ_MODELS) {
+    try {
+      console.log(
+        `[Vision] Trying Groq: ${model}`
+      );
+
+      const completion =
+        await groq.chat.completions.create({
+          model,
+
+          messages: [
+            {
+              role: "user",
+
+              content: [
+                {
+                  type: "text",
+                  text: VISION_PROMPT,
+                },
+
+                {
+                  type: "image_url",
+
+                  image_url: {
+                    url: imageDataUrl,
+                  },
+                },
+              ],
+            },
+          ],
+
+          temperature: 0.1,
+
+          max_completion_tokens: 2000,
+
+          // Groq Qwen vision models support JSON mode.
+          response_format: {
+            type: "json_object",
+          },
+        });
+
+      const content =
+        completion?.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error(
+          "Groq returned an empty response."
+        );
+      }
+
+      const parsed =
+        parseVisionJson(content);
+
+      const normalized =
+        normalizeProviderResult(parsed);
+
+      console.log(
+        `[Vision] Groq succeeded: ${model}`
+      );
+
+      return normalized;
+    } catch (error) {
+      const message =
+        error?.message ||
+        safeString(error);
+
+      console.error(
+        `[Vision] Groq ${model} failed: ${message}`
+      );
+
+      errors.push({
+        provider: model,
+        error: message,
+      });
+    }
+  }
+
+  throw new Error(
+    `All Groq vision models failed: ${JSON.stringify(
+      errors
+    )}`
+  );
+}
+
+
+// ============================================================================
+// OPENROUTER VISION
+// ============================================================================
+
+async function analyzeWithOpenRouterVision({
+  buffer,
+  mimetype,
+  originalname,
+}) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error(
+      "OPENROUTER_API_KEY is not configured."
+    );
+  }
+
+  const imageDataUrl =
+    createImageDataUrl(
+      buffer,
+      mimetype
     );
 
-    /*
-     * GEMINI REQUEST
-     */
+  console.log(
+    `[Vision] Trying OpenRouter: ${OPENROUTER_MODEL}`
+  );
 
-    const response =
-      await ai.models.generateContent({
-        model: MODEL,
+  const response = await fetch(
+    OPENROUTER_URL,
+    {
+      method: "POST",
 
-        contents: [
+      headers: {
+        Authorization:
+          `Bearer ${process.env.OPENROUTER_API_KEY}`,
+
+        "Content-Type":
+          "application/json",
+
+        "HTTP-Referer":
+          "http://localhost:5173",
+
+        "X-Title":
+          "TruthLens",
+      },
+
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+
+        messages: [
           {
-            inlineData: {
-              mimeType:
-                mimetype,
+            role: "user",
 
-              data:
-                base64Image,
-            },
-          },
+            content: [
+              {
+                type: "text",
+                text: VISION_PROMPT,
+              },
 
-          {
-            text: prompt,
+              {
+                type: "image_url",
+
+                image_url: {
+                  url: imageDataUrl,
+                },
+              },
+            ],
           },
         ],
 
-        config: {
-          responseMimeType:
-            "application/json",
+        temperature: 0.1,
 
-          responseSchema:
-            VISION_SCHEMA,
+        max_tokens: 2000,
 
-          thinkingConfig: {
-            thinkingLevel:
-              "medium",
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT use:
+         *
+         * response_format: {
+         *   type: "json_object"
+         * }
+         *
+         * here.
+         *
+         * openrouter/free dynamically chooses a free provider/model.
+         * Some selected vision models do not support structured outputs.
+         *
+         * We therefore ask for JSON in the prompt and parse it ourselves.
+         */
+      }),
+    }
+  );
+
+  const rawText =
+    await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenRouter ${response.status}: ${rawText}`
+    );
+  }
+
+  let data;
+
+  try {
+    data = JSON.parse(rawText);
+  } catch (error) {
+    throw new Error(
+      `OpenRouter returned invalid HTTP JSON: ${rawText.slice(
+        0,
+        1000
+      )}`
+    );
+  }
+
+  const content =
+    extractOpenRouterText(data);
+
+  if (!content) {
+    throw new Error(
+      "OpenRouter returned no message content."
+    );
+  }
+
+  const parsed =
+    parseVisionJson(content);
+
+  const normalized =
+    normalizeProviderResult(parsed);
+
+  console.log(
+    "[Vision] OpenRouter Free succeeded."
+  );
+
+  return normalized;
+}
+
+
+// ============================================================================
+// GEMINI VISION
+// ============================================================================
+
+async function analyzeWithGeminiVision({
+  buffer,
+  mimetype,
+  originalname,
+}) {
+  if (!gemini) {
+    throw new Error(
+      "GEMINI_API_KEY is not configured."
+    );
+  }
+
+  const base64Image =
+    buffer.toString("base64");
+
+  console.log(
+    `[Vision] Trying Gemini: ${GEMINI_MODEL}`
+  );
+
+  const response =
+    await gemini.models.generateContent({
+      model: GEMINI_MODEL,
+
+      contents: [
+        {
+          text: VISION_PROMPT,
+        },
+
+        {
+          inlineData: {
+            mimeType: mimetype,
+            data: base64Image,
           },
         },
-      });
+      ],
 
-    /*
-     * RESPONSE TEXT
-     */
+      config: {
+        temperature: 0.1,
 
-    const text =
-      response.text;
+        responseMimeType:
+          "application/json",
+      },
+    });
 
-    if (
-      !text ||
-      typeof text !== "string"
-    ) {
-      throw new Error(
-        "Gemini Vision returned an empty response."
-      );
-    }
+  const content =
+    response?.text;
 
-    /*
-     * PARSE JSON
-     */
+  if (!content) {
+    throw new Error(
+      "Gemini returned an empty response."
+    );
+  }
 
-    let parsed;
+  const parsed =
+    parseVisionJson(content);
 
+  const normalized =
+    normalizeProviderResult(parsed);
+
+  console.log(
+    `[Vision] Gemini succeeded: ${GEMINI_MODEL}`
+  );
+
+  return normalized;
+}
+
+
+// ============================================================================
+// MAIN PROVIDER ROUTER
+// ============================================================================
+
+async function analyzeImageWithGeminiVision({
+  buffer,
+  mimetype,
+  originalname,
+  metadata = null,
+  forensicSignals = null,
+}) {
+  console.log("");
+  console.log(
+    "========================================"
+  );
+  console.log(
+    "TruthLens Vision Provider Router"
+  );
+  console.log(
+    "========================================"
+  );
+
+  const providers = [];
+
+  if (groq) {
+    providers.push({
+      name: "Groq Qwen Vision",
+
+      analyze: () =>
+        analyzeWithGroqVision({
+          buffer,
+          mimetype,
+          originalname,
+        }),
+    });
+  } else {
+    console.log(
+      "[Vision] Groq skipped: GROQ_API_KEY missing."
+    );
+  }
+
+  if (process.env.OPENROUTER_API_KEY) {
+    providers.push({
+      name: "OpenRouter Free",
+
+      analyze: () =>
+        analyzeWithOpenRouterVision({
+          buffer,
+          mimetype,
+          originalname,
+        }),
+    });
+  } else {
+    console.log(
+      "[Vision] OpenRouter skipped: OPENROUTER_API_KEY missing."
+    );
+  }
+
+  if (gemini) {
+    providers.push({
+      name: "Gemini 3.6 Flash",
+
+      analyze: () =>
+        analyzeWithGeminiVision({
+          buffer,
+          mimetype,
+          originalname,
+        }),
+    });
+  } else {
+    console.log(
+      "[Vision] Gemini skipped: GEMINI_API_KEY missing."
+    );
+  }
+
+  if (providers.length === 0) {
+    throw new Error(
+      "No vision provider is configured. Add GROQ_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY."
+    );
+  }
+
+  const errors = [];
+
+  for (const provider of providers) {
     try {
-      parsed =
-        JSON.parse(text);
+      console.log("");
+      console.log(
+        `[Vision] Attempting ${provider.name}...`
+      );
+
+      const result =
+        await provider.analyze();
+
+      console.log(
+        `[Vision] Provider succeeded: ${provider.name}`
+      );
+
+      console.log(
+        "========================================"
+      );
+      console.log("");
+
+      return result;
     } catch (error) {
+      const message =
+        error?.message ||
+        safeString(error);
+
       console.error(
-        "[Gemini Vision] Invalid JSON:"
+        `[Vision] ${provider.name} failed: ${message}`
       );
 
-      console.error(text);
-
-      throw new Error(
-        "Gemini Vision returned invalid JSON."
-      );
+      errors.push({
+        provider: provider.name,
+        error: message,
+      });
     }
+  }
 
-    /*
-     * NORMALIZE
-     */
+  console.error(
+    "[Vision] All vision providers failed."
+  );
 
-    const result =
-      normalizeResult(
-        parsed
-      );
+  console.error(
+    JSON.stringify(errors, null, 2)
+  );
 
-    /*
-     * LOG RESULT
-     */
+  console.log(
+    "========================================"
+  );
+  console.log("");
 
-    console.log("");
-    console.log(
-      "========== GEMINI VISION RESULT =========="
-    );
+  throw new Error(
+    `All vision providers failed: ${JSON.stringify(
+      errors
+    )}`
+  );
+}
 
-    console.log(
-      "Classification:",
-      result.classification
-    );
 
-    console.log(
-      "AI Generated:",
-      result.aiGeneratedScore
-    );
-
-    console.log(
-      "Manipulation:",
-      result.manipulationScore
-    );
-
-    console.log(
-      "Visual Authenticity:",
-      result.visualAuthenticityScore
-    );
-
-    console.log(
-      "Confidence:",
-      result.confidence
-    );
-
-    console.log(
-      "Evidence Count:",
-      result.evidenceCount
-    );
-
-    console.log(
-      "Evidence Quality:",
-      result.evidenceQuality
-    );
-
-    console.log(
-      "Summary:",
-      result.summary
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    /*
-     * RETURN
-     */
-
-    return result;
-  };
-
-/* =========================================================
-   EXPORT
-========================================================= */
+// ============================================================================
+// EXPORT
+// ============================================================================
 
 module.exports = {
   analyzeImageWithGeminiVision,

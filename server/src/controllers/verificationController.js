@@ -9,6 +9,9 @@ const {
   analyzeImage,
 } = require("../services/image/imageVerificationService");
 
+const {
+  analyzeImageWithGeminiVision,
+} = require("../services/ai/geminiVisionService");
 
 /* =========================================================
    GET USER SETTINGS
@@ -71,7 +74,7 @@ const generateVerificationId = () => {
   const randomNumber =
     Math.floor(
       1000 +
-        Math.random() * 9000
+      Math.random() * 9000
     );
 
   return `TL-${year}-${randomNumber}`;
@@ -183,6 +186,9 @@ const createVerification = async (
 
           originalname:
             req.file.originalname,
+
+          analyzeVision:
+            analyzeImageWithGeminiVision,
         });
 
 
@@ -369,7 +375,7 @@ const createVerification = async (
       console.log(
         "Source:",
         source ||
-          "No source provided"
+        "No source provided"
       );
 
 
