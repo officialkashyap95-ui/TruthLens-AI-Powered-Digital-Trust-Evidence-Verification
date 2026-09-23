@@ -51,7 +51,7 @@ export interface AnalysisItem {
 
 
 /* =========================================================
-   IMAGE FILE INFORMATION
+   FILE INFORMATION
 ========================================================= */
 
 export interface VerificationFile {
@@ -70,7 +70,7 @@ export interface VerificationFile {
 
 
 /* =========================================================
-   IMAGE METADATA
+   METADATA
 ========================================================= */
 
 export interface VerificationMetadata {
@@ -412,16 +412,6 @@ export interface UpdateSettingsRequest {
    API URL
 ========================================================= */
 
-/*
- * Local development:
- *
- * VITE_API_URL=http://localhost:5001
- *
- * Production:
- *
- * VITE_API_URL=https://truthlens-ai-powered-digital-trust-3kwt.onrender.com
- */
-
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5001";
@@ -549,7 +539,8 @@ const normalizeVerification = (
 ========================================================= */
 
 export const createVerification = async (
-  data: VerificationRequest
+  data: VerificationRequest,
+  token: string
 ): Promise<VerificationResponse> => {
   try {
     const response =
@@ -561,6 +552,9 @@ export const createVerification = async (
           headers: {
             "Content-Type":
               "application/json",
+
+            Authorization:
+              `Bearer ${token}`,
           },
 
           body:
@@ -575,12 +569,6 @@ export const createVerification = async (
       ) as VerificationResponse | null;
 
 
-    /*
-     * Always log the raw response so the actual
-     * server payload is visible in the browser
-     * console, regardless of which check below
-     * ends up failing.
-     */
     console.log(
       "[TruthLens] POST /api/verifications ->",
       "status:",
@@ -637,7 +625,8 @@ export const createVerification = async (
 
 export const createImageVerification = async (
   file: File,
-  source?: string
+  source?: string,
+  token?: string
 ): Promise<VerificationResponse> => {
 
   /* -------------------------------------------------------
@@ -743,6 +732,13 @@ export const createImageVerification = async (
            * The browser creates the multipart boundary.
            */
 
+          headers: token
+            ? {
+                Authorization:
+                  `Bearer ${token}`,
+              }
+            : undefined,
+
           body:
             formData,
         }
@@ -817,6 +813,205 @@ export const createImageVerification = async (
   } catch (error) {
     console.error(
       "[TruthLens] Image verification error:",
+      error
+    );
+
+    throw error;
+  }
+};
+
+
+/* =========================================================
+   VIDEO VERIFICATION
+========================================================= */
+
+export const createVideoVerification = async (
+  file: File,
+  source?: string,
+  token?: string
+): Promise<VerificationResponse> => {
+
+  /* -------------------------------------------------------
+     VALIDATE FILE
+  ------------------------------------------------------- */
+
+  if (!file) {
+    throw new Error(
+      "Please select a video."
+    );
+  }
+
+
+  /* -------------------------------------------------------
+     ALLOWED TYPES
+  ------------------------------------------------------- */
+
+  const allowedTypes = [
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+  ];
+
+
+  if (
+    !allowedTypes.includes(
+      file.type
+    )
+  ) {
+    throw new Error(
+      "Unsupported video type. Please upload MP4, MOV, or WEBM."
+    );
+  }
+
+
+  /* -------------------------------------------------------
+     MAX SIZE
+  ------------------------------------------------------- */
+
+  const maxSize =
+    100 * 1024 * 1024;
+
+
+  if (
+    file.size > maxSize
+  ) {
+    throw new Error(
+      "Video exceeds the maximum allowed size of 100 MB."
+    );
+  }
+
+
+  /* -------------------------------------------------------
+     FORM DATA
+  ------------------------------------------------------- */
+
+  const formData =
+    new FormData();
+
+
+  formData.append(
+    "type",
+    "video"
+  );
+
+
+  formData.append(
+    "file",
+    file
+  );
+
+
+  if (
+    source?.trim()
+  ) {
+    formData.append(
+      "source",
+      source.trim()
+    );
+  }
+
+
+  /* -------------------------------------------------------
+     REQUEST
+  ------------------------------------------------------- */
+
+  try {
+    console.log(
+      "[TruthLens] Uploading video:",
+      file.name
+    );
+
+
+    const response =
+      await fetch(
+        `${API_URL}/api/verifications/video`,
+        {
+          method: "POST",
+
+          /*
+           * Do NOT manually set Content-Type.
+           *
+           * The browser automatically creates
+           * the multipart/form-data boundary.
+           */
+
+          headers: token
+            ? {
+                Authorization:
+                  `Bearer ${token}`,
+              }
+            : undefined,
+
+          body:
+            formData,
+        }
+      );
+
+
+    const result =
+      await parseJsonResponse(
+        response
+      ) as VerificationResponse | null;
+
+
+    console.log(
+      "[TruthLens] Video verification response:",
+      result
+    );
+
+
+    if (
+      !response.ok ||
+      !result?.success
+    ) {
+      throw new Error(
+        result?.message ||
+        `Video verification failed (${response.status}).`
+      );
+    }
+
+
+    if (
+      !result.verification
+    ) {
+      throw new Error(
+        "Server responded successfully but the verification result was missing."
+      );
+    }
+
+
+    result.verification =
+      normalizeVerification(
+        result.verification
+      );
+
+
+    console.log(
+      "[TruthLens] Final video verdict:",
+      result.verification.verdict
+    );
+
+    console.log(
+      "[TruthLens] Video confidence:",
+      result.verification.confidence
+    );
+
+    console.log(
+      "[TruthLens] Video risk:",
+      result.verification.riskScore
+    );
+
+    console.log(
+      "[TruthLens] Video metadata:",
+      result.verification.metadata
+    );
+
+
+    return result;
+
+  } catch (error) {
+    console.error(
+      "[TruthLens] Video verification error:",
       error
     );
 

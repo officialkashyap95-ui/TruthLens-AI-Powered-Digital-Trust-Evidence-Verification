@@ -13,6 +13,10 @@ const {
   analyzeImageWithGeminiVision,
 } = require("../services/ai/geminiVisionService");
 
+const {
+  analyzeVideo,
+} = require("../services/video/videoVerificationService");
+
 /* =========================================================
    GET USER SETTINGS
 ========================================================= */
@@ -543,6 +547,257 @@ const createVerification = async (
 
 
 /* =========================================================
+   CREATE VIDEO VERIFICATION
+========================================================= */
+
+const createVideoVerification = async (req, res) => {
+  try {
+    /* -------------------------------------------------------
+       FILE VALIDATION
+    ------------------------------------------------------- */
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload a video.",
+      });
+    }
+
+    /* -------------------------------------------------------
+       BASIC VIDEO VALIDATION
+    ------------------------------------------------------- */
+
+    const allowedTypes = new Set([
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+    ]);
+
+    if (!allowedTypes.has(req.file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid video format. Only MP4, MOV, and WEBM videos are supported.",
+      });
+    }
+
+    /* -------------------------------------------------------
+       USER + SETTINGS
+    ------------------------------------------------------- */
+
+    const userId =
+      req.userId ||
+      "development-user";
+
+    const settings =
+      await getUserSettings(userId);
+
+    const source =
+      req.body.source || "";
+
+    /* -------------------------------------------------------
+       LOG VIDEO INFORMATION
+    ------------------------------------------------------- */
+
+    console.log("");
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "Starting video verification..."
+    );
+
+    console.log(
+      "Filename:",
+      req.file.originalname
+    );
+
+    console.log(
+      "MIME type:",
+      req.file.mimetype
+    );
+
+    console.log(
+      "Size:",
+      (
+        req.file.size /
+        1024 /
+        1024
+      ).toFixed(2),
+      "MB"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    /* -------------------------------------------------------
+       ANALYZE VIDEO
+    ------------------------------------------------------- */
+
+    const analysis =
+      await analyzeVideo({
+        buffer:
+          req.file.buffer,
+
+        originalname:
+          req.file.originalname,
+
+        mimetype:
+          req.file.mimetype,
+      });
+
+    /* -------------------------------------------------------
+       GENERATE VERIFICATION ID
+    ------------------------------------------------------- */
+
+    const verificationId =
+      generateVerificationId();
+
+    /* -------------------------------------------------------
+       BUILD VIDEO VERIFICATION RESULT
+    ------------------------------------------------------- */
+
+    const verificationData = {
+      userId,
+
+      type: "video",
+
+      content:
+        req.file.originalname,
+
+      source,
+
+      verdict:
+        analysis.verdict,
+
+      confidence:
+        analysis.confidence,
+
+      riskScore:
+        analysis.risk || 0,
+
+      summary:
+        `Video analyzed using ${analysis.metadata.framesAnalyzed} representative frames.`,
+
+      analysis: [
+        {
+          type: "video",
+          title: "Video analysis",
+          description:
+            "The video was sampled into representative frames and each frame was analyzed using the existing vision verification pipeline.",
+        },
+      ],
+
+      evidence: [],
+
+      sourcesAnalyzed:
+        analysis.metadata.framesAnalyzed,
+
+      processingTime: "",
+
+      verificationId,
+
+      fileName:
+        req.file.originalname,
+
+      mimeType:
+        req.file.mimetype,
+
+      fileSize:
+        req.file.size,
+
+      metadata:
+        analysis.metadata,
+
+      visualAnalysis: {
+        aiGeneration:
+          analysis.aiGeneration,
+
+        risk:
+          analysis.risk,
+
+        framesAnalyzed:
+          analysis.metadata.framesAnalyzed,
+
+        totalFrames:
+          analysis.metadata.totalFrames,
+      },
+
+      fusion: {
+        method:
+          "Representative frame analysis",
+
+        confidence:
+          analysis.confidence,
+
+        risk:
+          analysis.risk,
+      },
+    };
+
+    /* -------------------------------------------------------
+       SAVE ONLY IF HISTORY IS ENABLED
+    ------------------------------------------------------- */
+
+    let verification =
+      verificationData;
+
+    if (settings.saveHistory) {
+      verification =
+        await Verification.create(
+          verificationData
+        );
+
+      console.log(
+        "Video verification saved:",
+        verification.verificationId
+      );
+    } else {
+      console.log(
+        "Video verification analyzed but history saving is disabled."
+      );
+    }
+
+    /* -------------------------------------------------------
+       RESPONSE
+    ------------------------------------------------------- */
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        settings.saveHistory
+          ? "Video verification created successfully."
+          : "Video verification completed successfully. History saving is disabled.",
+
+      verification,
+
+      settings:
+        formatSettings(settings),
+    });
+  } catch (error) {
+    console.error("");
+
+    console.error(
+      "Video verification error:"
+    );
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        error.message ||
+        "Failed to analyze video.",
+    });
+  }
+};
+
+/* =========================================================
    GET SINGLE VERIFICATION
 ========================================================= */
 
@@ -800,6 +1055,8 @@ const deleteVerificationHistory = async (
 
 module.exports = {
   createVerification,
+
+  createVideoVerification,
 
   getVerification,
 

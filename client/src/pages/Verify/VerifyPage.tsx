@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
     ArrowRight,
@@ -22,12 +23,15 @@ import VerificationInfo from "../../components/verification/VerificationInfo";
 import {
     createVerification,
     createImageVerification,
+    createVideoVerification,
 } from "../../services/verificationService";
 
 import "./Verify.css";
 
 export default function VerifyPage() {
     const navigate = useNavigate();
+
+    const { getToken } = useAuth();
 
     const [searchParams] =
         useSearchParams();
@@ -51,7 +55,9 @@ export default function VerifyPage() {
         useState(false);
 
     /*
-     * Read verification type from URL.
+     * =========================================================
+     * READ VERIFICATION TYPE FROM URL
+     * =========================================================
      */
     useEffect(() => {
         const queryType =
@@ -73,7 +79,9 @@ export default function VerifyPage() {
     }, [searchParams]);
 
     /*
-     * Change verification type.
+     * =========================================================
+     * CHANGE VERIFICATION TYPE
+     * =========================================================
      */
     const handleTypeChange = (
         nextType: VerificationType
@@ -87,15 +95,17 @@ export default function VerifyPage() {
     };
 
     /*
-     * Submit verification.
+     * =========================================================
+     * SUBMIT VERIFICATION
+     * =========================================================
      */
     const handleSubmit = async () => {
         setError("");
 
         /*
-         * =========================
+         * =====================================================
          * TEXT VALIDATION
-         * =========================
+         * =====================================================
          */
         if (
             type === "text" &&
@@ -109,9 +119,9 @@ export default function VerifyPage() {
         }
 
         /*
-         * =========================
+         * =====================================================
          * FILE VALIDATION
-         * =========================
+         * =====================================================
          */
         if (
             type !== "text" &&
@@ -127,68 +137,86 @@ export default function VerifyPage() {
         setLoading(true);
 
         try {
+            /*
+             * =================================================
+             * GET CLERK AUTH TOKEN
+             * =================================================
+             */
+            const token =
+                await getToken();
+
+            if (!token) {
+                throw new Error(
+                    "Authentication session expired. Please sign in again."
+                );
+            }
+
             let result;
 
             /*
-             * =========================
+             * =================================================
              * TEXT VERIFICATION
-             * =========================
+             * =================================================
              */
             if (type === "text") {
                 result =
-                    await createVerification({
-                        type: "text",
+                    await createVerification(
+                        {
+                            type: "text",
 
-                        content:
-                            text.trim(),
+                            content:
+                                text.trim(),
 
-                        source:
-                            source.trim(),
-                    });
+                            source:
+                                source.trim(),
+                        },
+                        token
+                    );
             }
 
             /*
-             * =========================
-             * FILE VERIFICATION
-             * =========================
+             * =================================================
+             * IMAGE VERIFICATION
+             * =================================================
              */
-            else {
-                /*
-                 * At the moment the backend
-                 * supports image verification.
-                 *
-                 * Video/document will remain
-                 * unavailable until their backend
-                 * services are implemented.
-                 */
-                if (type !== "image") {
-                    throw new Error(
-                        `${type.charAt(0).toUpperCase() +
-                        type.slice(1)
-                        } verification is coming soon.`
-                    );
-                }
-
+            else if (type === "image") {
                 result =
                     await createImageVerification(
                         file!,
-                        source.trim()
+                        source.trim(),
+                        token
                     );
             }
 
             /*
-             * =========================
+             * =================================================
+             * VIDEO VERIFICATION
+             * =================================================
+             */
+            else if (type === "video") {
+                result =
+                    await createVideoVerification(
+                        file!,
+                        source.trim(),
+                        token
+                    );
+            }
+
+            /*
+             * =================================================
+             * DOCUMENT VERIFICATION
+             * =================================================
+             */
+            else {
+                throw new Error(
+                    "Document verification is coming soon."
+                );
+            }
+
+            /*
+             * =================================================
              * VALIDATE RESULT
-             *
-             * createVerification /
-             * createImageVerification already
-             * throw a detailed error (including
-             * the raw server response) if
-             * `verification` is missing, so by
-             * this point it's guaranteed to be
-             * present. This is just a final
-             * type-narrowing safety net.
-             * =========================
+             * =================================================
              */
             if (
                 !result.verification
@@ -199,9 +227,9 @@ export default function VerifyPage() {
             }
 
             /*
-             * =========================
+             * =================================================
              * GET VERIFICATION ID
-             * =========================
+             * =================================================
              */
             const verificationId =
                 result.verification
@@ -214,15 +242,9 @@ export default function VerifyPage() {
             }
 
             /*
-             * =========================
+             * =================================================
              * GO TO RESULT PAGE
-             *
-             * Pass the verification we already
-             * have so ResultPage can render it
-             * immediately, without depending on
-             * a second fetch finding the record
-             * in the database.
-             * =========================
+             * =================================================
              */
             navigate(
                 `/result/${verificationId}`,
@@ -230,6 +252,7 @@ export default function VerifyPage() {
                     state: {
                         verification:
                             result.verification,
+
                         savedToHistory:
                             result.settings
                                 ?.saveHistory !==
@@ -257,9 +280,9 @@ export default function VerifyPage() {
     return (
         <div className="verify-shell">
 
-            {/* =========================
-          HEADER
-      ========================== */}
+            {/* =================================================
+                HEADER
+            ================================================= */}
 
             <header className="verify-nav">
 
@@ -271,7 +294,9 @@ export default function VerifyPage() {
                         className="verify-brand"
                     >
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
-                            <span className="text-sm font-bold">TL</span>
+                            <span className="text-sm font-bold">
+                                TL
+                            </span>
                         </div>
 
                         TruthLens
@@ -318,9 +343,9 @@ export default function VerifyPage() {
 
             </header>
 
-            {/* =========================
-          MAIN
-      ========================== */}
+            {/* =================================================
+                MAIN
+            ================================================= */}
 
             <main className="verify-main">
 
@@ -357,9 +382,9 @@ export default function VerifyPage() {
 
                 </motion.div>
 
-                {/* =========================
-            WORKSPACE
-        ========================== */}
+                {/* =================================================
+                    WORKSPACE
+                ================================================= */}
 
                 <section
                     className="verify-workspace"
@@ -375,7 +400,10 @@ export default function VerifyPage() {
 
                     <AnimatePresence mode="wait">
 
-                        {/* Loading */}
+                        {/* =================================================
+                            LOADING
+                        ================================================= */}
+
                         {loading ? (
 
                             <AnalysisProgress
@@ -408,9 +436,9 @@ export default function VerifyPage() {
                                 }}
                             >
 
-                                {/* =====================
-                    TEXT
-                ====================== */}
+                                {/* =================================================
+                                    TEXT
+                                ================================================= */}
 
                                 {type === "text" ? (
 
@@ -427,9 +455,9 @@ export default function VerifyPage() {
 
                                 ) : (
 
-                                    /* =====================
+                                    /* =================================================
                                        FILE
-                                    ====================== */
+                                    ================================================= */
 
                                     <div className="file-area">
 
@@ -492,7 +520,10 @@ export default function VerifyPage() {
 
                                 )}
 
-                                {/* Error */}
+                                {/* =================================================
+                                    ERROR
+                                ================================================= */}
+
                                 {error && (
 
                                     <p
@@ -504,7 +535,10 @@ export default function VerifyPage() {
 
                                 )}
 
-                                {/* Analyze */}
+                                {/* =================================================
+                                    ANALYZE BUTTON
+                                ================================================= */}
+
                                 <button
                                     type="button"
                                     className="analyze-button"
