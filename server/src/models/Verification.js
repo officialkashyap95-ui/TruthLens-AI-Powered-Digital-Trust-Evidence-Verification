@@ -148,6 +148,10 @@ const metadataSchema =
         default: 0,
       },
 
+      /* =========================
+         IMAGE METADATA
+      ========================= */
+
       hasMetadata: {
         type: Boolean,
         default: false,
@@ -186,6 +190,45 @@ const metadataSchema =
       cameraModel: {
         type: String,
         default: "",
+      },
+
+      /* =========================
+         VIDEO METADATA
+      ========================= */
+
+      duration: {
+        type: Number,
+        default: null,
+      },
+
+      width: {
+        type: Number,
+        default: null,
+      },
+
+      height: {
+        type: Number,
+        default: null,
+      },
+
+      fps: {
+        type: Number,
+        default: null,
+      },
+
+      codec: {
+        type: String,
+        default: "",
+      },
+
+      framesAnalyzed: {
+        type: Number,
+        default: 0,
+      },
+
+      totalFrames: {
+        type: Number,
+        default: 0,
       },
     },
     {
@@ -304,8 +347,17 @@ const visualAnalysisSchema =
         type: Number,
         default: 0,
       },
-    },
 
+      framesAnalyzed: {
+        type: Number,
+        default: 0,
+      },
+
+      totalFrames: {
+        type: Number,
+        default: 0,
+      },
+    },
     {
       _id: false,
     }
@@ -319,12 +371,27 @@ const visualAnalysisSchema =
 const fusionSchema =
   new mongoose.Schema(
     {
+      method: {
+        type: String,
+        default: "",
+      },
+
       forensicRisk: {
         type: Number,
-        default: 0,
+        default: null,
       },
 
       visualRisk: {
+        type: Number,
+        default: null,
+      },
+
+      manipulationRisk: {
+        type: Number,
+        default: null,
+      },
+
+      aiGenerationRisk: {
         type: Number,
         default: null,
       },
@@ -338,8 +405,12 @@ const fusionSchema =
         type: Number,
         default: 0,
       },
-    },
 
+      confidence: {
+        type: Number,
+        default: 0,
+      },
+    },
     {
       _id: false,
     }

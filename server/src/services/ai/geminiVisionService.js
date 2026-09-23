@@ -26,14 +26,14 @@ const { GoogleGenAI } = require("@google/genai");
 // ============================================================================
 
 const GROQ_MODELS = [
-  "qwen/qwen3.6-27b",
   "qwen/qwen3.8-27b",
 ];
 
 const OPENROUTER_MODEL = "openrouter/free";
 
-const GEMINI_MODEL = "gemini-3.6-flash";
-
+const GEMINI_MODEL =
+  "gemini-3.8-flash";
+  
 const OPENROUTER_URL =
   "https://openrouter.ai/api/v1/chat/completions";
 
