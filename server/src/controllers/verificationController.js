@@ -660,6 +660,10 @@ const createVideoVerification = async (req, res) => {
        BUILD VIDEO VERIFICATION RESULT
     ------------------------------------------------------- */
 
+    const processingStart =
+      Date.now();
+
+
     const verificationData = {
       userId,
 
@@ -674,29 +678,56 @@ const createVideoVerification = async (req, res) => {
         analysis.verdict,
 
       confidence:
-        analysis.confidence,
+        analysis.confidence ?? 0,
 
       riskScore:
-        analysis.risk || 0,
+        analysis.risk ?? 0,
 
       summary:
         `Video analyzed using ${analysis.metadata.framesAnalyzed} representative frames.`,
 
       analysis: [
         {
-          type: "video",
-          title: "Video analysis",
+          title:
+            "Video analysis",
+
           description:
-            "The video was sampled into representative frames and each frame was analyzed using the existing vision verification pipeline.",
+            `TruthLens analyzed ${analysis.metadata.framesAnalyzed} representative frames from the uploaded video using the existing visual verification pipeline.`,
+        },
+
+        {
+          title:
+            "Video metadata",
+
+          description:
+            `The video is ${analysis.metadata.duration.toFixed(2)} seconds long at ${analysis.metadata.width} × ${analysis.metadata.height} resolution and ${analysis.metadata.fps || "unknown"} FPS.`,
+        },
+
+        {
+          title:
+            "AI visual assessment",
+
+          description:
+            `Frame-level visual analysis produced an average manipulation score of ${analysis.manipulationScore ?? "unavailable"}/100 and AI-generation likelihood of ${analysis.aiGeneration ?? "unavailable"}/100.`,
         },
       ],
 
+      /*
+       * These are not external sources.
+       *
+       * They are video frames.
+       */
       evidence: [],
 
       sourcesAnalyzed:
-        analysis.metadata.framesAnalyzed,
+        0,
 
-      processingTime: "",
+      processingTime:
+        `${(
+          (Date.now() -
+            processingStart) /
+          1000
+        ).toFixed(2)} seconds`,
 
       verificationId,
 
@@ -713,11 +744,24 @@ const createVideoVerification = async (req, res) => {
         analysis.metadata,
 
       visualAnalysis: {
-        aiGeneration:
+
+        available:
+          analysis.confidence !== null,
+
+        aiGeneratedScore:
           analysis.aiGeneration,
 
-        risk:
-          analysis.risk,
+        manipulationScore:
+          analysis.manipulationScore,
+
+        visualAuthenticityScore:
+          analysis.visualAuthenticityScore,
+
+        confidence:
+          analysis.confidence,
+
+        verdict:
+          analysis.verdict,
 
         framesAnalyzed:
           analysis.metadata.framesAnalyzed,
@@ -727,14 +771,27 @@ const createVideoVerification = async (req, res) => {
       },
 
       fusion: {
+
         method:
           "Representative frame analysis",
 
         confidence:
           analysis.confidence,
 
-        risk:
+        forensicRisk:
+          null,
+
+        visualRisk:
           analysis.risk,
+
+        aiGenerationRisk:
+          analysis.aiGeneration,
+
+        evidenceQuality:
+          analysis.confidence,
+
+        independentSignals:
+          1,
       },
     };
 
