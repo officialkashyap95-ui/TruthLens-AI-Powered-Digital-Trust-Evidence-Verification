@@ -550,8 +550,12 @@ const createVerification = async (
    CREATE VIDEO VERIFICATION
 ========================================================= */
 
-const createVideoVerification = async (req, res) => {
+const createVideoVerification = async (
+  req,
+  res
+) => {
   try {
+
     /* -------------------------------------------------------
        FILE VALIDATION
     ------------------------------------------------------- */
@@ -562,6 +566,7 @@ const createVideoVerification = async (req, res) => {
         message: "Please upload a video.",
       });
     }
+
 
     /* -------------------------------------------------------
        BASIC VIDEO VALIDATION
@@ -581,6 +586,7 @@ const createVideoVerification = async (req, res) => {
       });
     }
 
+
     /* -------------------------------------------------------
        USER + SETTINGS
     ------------------------------------------------------- */
@@ -594,6 +600,7 @@ const createVideoVerification = async (req, res) => {
 
     const source =
       req.body.source || "";
+
 
     /* -------------------------------------------------------
        LOG VIDEO INFORMATION
@@ -633,6 +640,15 @@ const createVideoVerification = async (req, res) => {
       "========================================"
     );
 
+
+    /* -------------------------------------------------------
+       START PROCESSING TIMER
+    ------------------------------------------------------- */
+
+    const processingStart =
+      Date.now();
+
+
     /* -------------------------------------------------------
        ANALYZE VIDEO
     ------------------------------------------------------- */
@@ -649,6 +665,7 @@ const createVideoVerification = async (req, res) => {
           req.file.mimetype,
       });
 
+
     /* -------------------------------------------------------
        GENERATE VERIFICATION ID
     ------------------------------------------------------- */
@@ -656,80 +673,303 @@ const createVideoVerification = async (req, res) => {
     const verificationId =
       generateVerificationId();
 
+
     /* -------------------------------------------------------
-       BUILD VIDEO VERIFICATION RESULT
+       SAFE METADATA VALUES
     ------------------------------------------------------- */
 
-    const processingStart =
-      Date.now();
+    const metadata =
+      analysis.metadata || {};
 
+    const framesAnalyzed =
+      metadata.framesAnalyzed ?? 0;
+
+    const totalFrames =
+      metadata.totalFrames ?? 0;
+
+    const duration =
+      metadata.duration ?? 0;
+
+    const width =
+      metadata.width ?? 0;
+
+    const height =
+      metadata.height ?? 0;
+
+    const fps =
+      metadata.fps ?? null;
+
+
+    /* -------------------------------------------------------
+       PROCESSING TIME
+    ------------------------------------------------------- */
+
+    const processingTime =
+      `${(
+        (Date.now() -
+          processingStart) /
+        1000
+      ).toFixed(2)} seconds`;
+
+
+    /* -------------------------------------------------------
+       BUILD ANALYSIS INFORMATION
+    ------------------------------------------------------- */
+
+    const analysisSections = [
+
+      {
+        title:
+          "Video analysis",
+
+        description:
+          `TruthLens analyzed ${framesAnalyzed} representative frames from the uploaded video using frame-level visual analysis.`,
+      },
+
+      {
+        title:
+          "Video metadata",
+
+        description:
+          `The video is ${duration.toFixed(2)} seconds long at ${width} × ${height} resolution and ${fps || "unknown"} FPS.`,
+      },
+
+      {
+        title:
+          "Risk assessment",
+
+        description:
+          `The video produced an average risk score of ${analysis.averageRisk ?? "unavailable"}/100 and a peak frame risk of ${analysis.peakRisk ?? "unavailable"}/100.`,
+      },
+
+      {
+        title:
+          "Suspicious regions",
+
+        description:
+          `${analysis.suspiciousFrameCount ?? 0} suspicious frames were identified across ${analysis.suspiciousSegmentCount ?? 0} suspicious video segments.`,
+      },
+
+    ];
+
+
+    /* -------------------------------------------------------
+       BUILD VISUAL ANALYSIS
+    ------------------------------------------------------- */
+
+    const visualAnalysis = {
+
+      available:
+        framesAnalyzed > 0,
+
+      classification:
+        analysis.verdict ||
+        "UNVERIFIED",
+
+      aiGeneratedScore:
+        analysis.aiGeneration ?? null,
+
+      manipulationScore:
+        analysis.manipulationScore ?? null,
+
+      visualAuthenticityScore:
+        analysis.visualAuthenticityScore ?? null,
+
+      confidence:
+        analysis.confidence ?? 0,
+
+      verdict:
+        analysis.verdict ||
+        "Insufficient Evidence",
+
+      findings:
+        analysis.findings || [],
+
+      manipulationIndicators:
+        analysis.manipulationIndicators || [],
+
+      authenticityIndicators:
+        analysis.authenticityIndicators || [],
+
+      limitations:
+        analysis.limitations || [],
+
+      evidenceQuality:
+        analysis.evidenceQuality ||
+        "Limited",
+
+      framesAnalyzed,
+
+      totalFrames,
+    };
+
+
+    /* -------------------------------------------------------
+       BUILD VIDEO ANALYSIS
+    ------------------------------------------------------- */
+
+    const videoAnalysis = {
+
+      averageRisk:
+        analysis.averageRisk ?? null,
+
+      peakRisk:
+        analysis.peakRisk ?? null,
+
+      fusedRisk:
+        analysis.fusedRisk ??
+        analysis.risk ??
+        null,
+
+      suspiciousFrameRatio:
+        analysis.suspiciousFrameRatio ??
+        0,
+
+      suspiciousFramePercentage:
+        analysis.suspiciousFramePercentage ??
+        0,
+
+      suspiciousFrameCount:
+        analysis.suspiciousFrameCount ??
+        0,
+
+      suspiciousSegmentCount:
+        analysis.suspiciousSegmentCount ??
+        0,
+
+      evidenceQuality:
+        analysis.evidenceQuality ||
+        "Limited",
+
+      frames:
+        analysis.frames || [],
+
+      suspiciousFrames:
+        analysis.suspiciousFrames || [],
+
+      suspiciousSegments:
+        analysis.suspiciousSegments || [],
+    };
+
+
+    /* -------------------------------------------------------
+       BUILD FUSION RESULT
+    ------------------------------------------------------- */
+
+    const fusion = {
+
+      method:
+        "Frame-level visual evidence fusion",
+
+      forensicRisk:
+        null,
+
+      visualRisk:
+        analysis.fusedRisk ??
+        analysis.risk ??
+        null,
+
+      manipulationRisk:
+        analysis.manipulationScore ??
+        null,
+
+      aiGenerationRisk:
+        analysis.aiGeneration ??
+        null,
+
+      evidenceQuality:
+        analysis.evidenceQuality ||
+        "Limited",
+
+      independentSignals:
+        analysis.suspiciousSegmentCount > 0
+          ? 2
+          : 1,
+
+      confidence:
+        analysis.confidence ??
+        0,
+    };
+
+
+    /* -------------------------------------------------------
+       BUILD FINAL VERIFICATION DOCUMENT
+    ------------------------------------------------------- */
 
     const verificationData = {
+
       userId,
 
-      type: "video",
+      type:
+        "video",
 
       content:
         req.file.originalname,
 
       source,
 
+
+      /* =========================
+         FINAL RESULT
+      ========================= */
+
       verdict:
-        analysis.verdict,
+        analysis.verdict ||
+        "Insufficient Evidence",
 
       confidence:
-        analysis.confidence ?? 0,
+        analysis.confidence ??
+        0,
 
       riskScore:
-        analysis.risk ?? 0,
+        analysis.fusedRisk ??
+        analysis.risk ??
+        0,
 
       summary:
-        `Video analyzed using ${analysis.metadata.framesAnalyzed} representative frames.`,
+        `Video analyzed using ${framesAnalyzed} representative frames. ` +
+        `Average risk: ${analysis.averageRisk ?? "unavailable"}/100. ` +
+        `Peak risk: ${analysis.peakRisk ?? "unavailable"}/100.`,
 
-      analysis: [
-        {
-          title:
-            "Video analysis",
 
-          description:
-            `TruthLens analyzed ${analysis.metadata.framesAnalyzed} representative frames from the uploaded video using the existing visual verification pipeline.`,
-        },
+      /* =========================
+         ANALYSIS
+      ========================= */
 
-        {
-          title:
-            "Video metadata",
+      analysis:
+        analysisSections,
 
-          description:
-            `The video is ${analysis.metadata.duration.toFixed(2)} seconds long at ${analysis.metadata.width} × ${analysis.metadata.height} resolution and ${analysis.metadata.fps || "unknown"} FPS.`,
-        },
 
-        {
-          title:
-            "AI visual assessment",
-
-          description:
-            `Frame-level visual analysis produced an average manipulation score of ${analysis.manipulationScore ?? "unavailable"}/100 and AI-generation likelihood of ${analysis.aiGeneration ?? "unavailable"}/100.`,
-        },
-      ],
+      /* =========================
+         EVIDENCE
+      ========================= */
 
       /*
-       * These are not external sources.
+       * These are not external evidence sources.
        *
-       * They are video frames.
+       * Video frames are stored under
+       * videoAnalysis.frames and
+       * videoAnalysis.suspiciousFrames.
        */
+
       evidence: [],
 
       sourcesAnalyzed:
         0,
 
-      processingTime:
-        `${(
-          (Date.now() -
-            processingStart) /
-          1000
-        ).toFixed(2)} seconds`,
+
+      /* =========================
+         PROCESSING
+      ========================= */
+
+      processingTime,
 
       verificationId,
+
+
+      /* =========================
+         FILE INFORMATION
+      ========================= */
 
       fileName:
         req.file.originalname,
@@ -740,60 +980,56 @@ const createVideoVerification = async (req, res) => {
       fileSize:
         req.file.size,
 
-      metadata:
-        analysis.metadata,
 
-      visualAnalysis: {
+      /* =========================
+         METADATA
+      ========================= */
 
-        available:
-          analysis.confidence !== null,
+      metadata: {
 
-        aiGeneratedScore:
-          analysis.aiGeneration,
+        ...metadata,
 
-        manipulationScore:
-          analysis.manipulationScore,
+        filename:
+          req.file.originalname,
 
-        visualAuthenticityScore:
-          analysis.visualAuthenticityScore,
+        mimeType:
+          req.file.mimetype,
 
-        confidence:
-          analysis.confidence,
+        sizeBytes:
+          req.file.size,
 
-        verdict:
-          analysis.verdict,
-
-        framesAnalyzed:
-          analysis.metadata.framesAnalyzed,
-
-        totalFrames:
-          analysis.metadata.totalFrames,
+        sizeMB:
+          Number(
+            (
+              req.file.size /
+              1024 /
+              1024
+            ).toFixed(2)
+          ),
       },
 
-      fusion: {
 
-        method:
-          "Representative frame analysis",
+      /* =========================
+         VISUAL ANALYSIS
+      ========================= */
 
-        confidence:
-          analysis.confidence,
+      visualAnalysis,
 
-        forensicRisk:
-          null,
 
-        visualRisk:
-          analysis.risk,
+      /* =========================
+         VIDEO ANALYSIS
+      ========================= */
 
-        aiGenerationRisk:
-          analysis.aiGeneration,
+      videoAnalysis,
 
-        evidenceQuality:
-          analysis.confidence,
 
-        independentSignals:
-          1,
-      },
+      /* =========================
+         FUSION
+      ========================= */
+
+      fusion,
     };
+
 
     /* -------------------------------------------------------
        SAVE ONLY IF HISTORY IS ENABLED
@@ -802,27 +1038,37 @@ const createVideoVerification = async (req, res) => {
     let verification =
       verificationData;
 
+
     if (settings.saveHistory) {
+
       verification =
         await Verification.create(
           verificationData
         );
 
+      console.log("");
+
       console.log(
         "Video verification saved:",
         verification.verificationId
       );
+
     } else {
+
+      console.log("");
+
       console.log(
         "Video verification analyzed but history saving is disabled."
       );
     }
+
 
     /* -------------------------------------------------------
        RESPONSE
     ------------------------------------------------------- */
 
     return res.status(201).json({
+
       success: true,
 
       message:
@@ -833,9 +1079,13 @@ const createVideoVerification = async (req, res) => {
       verification,
 
       settings:
-        formatSettings(settings),
+        formatSettings(
+          settings
+        ),
     });
+
   } catch (error) {
+
     console.error("");
 
     console.error(
@@ -845,6 +1095,7 @@ const createVideoVerification = async (req, res) => {
     console.error(error);
 
     return res.status(500).json({
+
       success: false,
 
       message:

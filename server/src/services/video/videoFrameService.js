@@ -9,12 +9,32 @@ const ffprobePath = require("ffprobe-static").path;
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
-/**
- * Maximum number of frames that will be analyzed.
- *
- * Keeping this bounded prevents very long videos from creating
- * hundreds/thousands of expensive AI vision requests.
+/* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const MAX_FRAMES = 15;
+const MIN_FRAMES = 6;
+
+const SCENE_THRESHOLD = 0.35;
+
+/*
+ * Prevent multiple scene-change timestamps that are
+ * extremely close to each other from wasting frame slots.
  */
+const SCENE_MIN_GAP = 0.5;
+
+/*
+ * If a scene timestamp is very close to an evenly
+ * distributed timestamp, consider it the same point.
+ */
+const TIMESTAMP_MERGE_GAP = 0.15;
+
+
+/* =========================================================
+   FRAME COUNT
+========================================================= */
+
 const getTargetFrameCount = (duration) => {
   if (duration <= 10) {
     return 6;
@@ -28,108 +48,538 @@ const getTargetFrameCount = (duration) => {
     return 12;
   }
 
-  return 15;
+  return MAX_FRAMES;
 };
 
-/**
- * Generate evenly distributed timestamps.
- *
- * We avoid the exact first and last frame because:
- * - the first frame can sometimes be black/faded
- * - the last frame can sometimes be a transition/end card
- *
- * Example:
- * duration = 10 seconds
- * count = 6
- *
- * timestamps:
- * 1.43, 2.86, 4.29, 5.71, 7.14, 8.57
- */
-const generateTimestamps = (duration, frameCount) => {
-  if (!Number.isFinite(duration) || duration <= 0) {
+
+/* =========================================================
+   TIMESTAMP HELPERS
+========================================================= */
+
+const formatTimestamp = (seconds) => {
+  const safeSeconds = Math.max(
+    Number(seconds) || 0,
+    0
+  );
+
+  const minutes = Math.floor(
+    safeSeconds / 60
+  );
+
+  const remainingSeconds =
+    safeSeconds - minutes * 60;
+
+  return `${String(minutes).padStart(
+    2,
+    "0"
+  )}:${remainingSeconds
+    .toFixed(2)
+    .padStart(5, "0")}`;
+};
+
+
+/* =========================================================
+   EVENLY DISTRIBUTED TIMESTAMPS
+========================================================= */
+
+const generateEvenTimestamps = (
+  duration,
+  frameCount
+) => {
+  if (
+    !Number.isFinite(duration) ||
+    duration <= 0 ||
+    frameCount <= 0
+  ) {
     return [];
   }
 
-  if (frameCount <= 1) {
-    return [Math.max(duration / 2, 0)];
+  /*
+   * Avoid the exact beginning and end because
+   * those frames can sometimes be black/unstable.
+   */
+  if (frameCount === 1) {
+    return [
+      Number(
+        (duration / 2).toFixed(3)
+      ),
+    ];
   }
 
   const timestamps = [];
 
-  for (let i = 1; i <= frameCount; i += 1) {
-    const timestamp = (duration * i) / (frameCount + 1);
+  for (
+    let i = 1;
+    i <= frameCount;
+    i += 1
+  ) {
+    const timestamp =
+      (duration * i) /
+      (frameCount + 1);
 
-    timestamps.push(Number(timestamp.toFixed(3)));
+    timestamps.push(
+      Number(
+        timestamp.toFixed(3)
+      )
+    );
   }
 
   return timestamps;
 };
 
+
+/* =========================================================
+   SCENE DETECTION
+========================================================= */
+
 /**
- * Convert seconds into a human-readable timestamp.
+ * Detect scene changes once.
  *
- * Example:
- * 5.63 -> "00:05.63"
- * 65.42 -> "01:05.42"
+ * IMPORTANT:
+ * This function is called only once per video.
+ *
+ * Scene detection is used for better frame sampling.
+ * It is NOT a deepfake detector.
  */
-const formatTimestamp = (seconds) => {
-  const safeSeconds = Math.max(Number(seconds) || 0, 0);
+const detectSceneChanges = (
+  videoPath,
+  duration
+) => {
+  return new Promise((resolve) => {
+    const timestamps = [];
 
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = safeSeconds - minutes * 60;
-
-  return `${String(minutes).padStart(2, "0")}:${remainingSeconds
-    .toFixed(2)
-    .padStart(5, "0")}`;
-};
-
-/**
- * Extract a single frame from a video at a specific timestamp.
- */
-const extractSingleFrame = (videoPath, outputPath, timestamp) => {
-  return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
-      /**
-       * Seeking before decoding keeps extraction considerably faster
-       * than decoding the entire video from the beginning.
-       */
-      .inputOptions([
-        "-ss",
-        String(timestamp),
-      ])
+      .videoFilters(
+        `select='gt(scene,${SCENE_THRESHOLD})',showinfo`
+      )
       .outputOptions([
-        "-frames:v",
-        "1",
-        "-q:v",
-        "2",
-        "-threads",
-        "1",
+        "-an",
+        "-f",
+        "null",
       ])
-      .output(outputPath)
-      .on("end", () => {
-        resolve();
-      })
-      .on("error", (error) => {
-        reject(error);
-      })
+      .output("-")
+      .on(
+        "stderr",
+        (line) => {
+          const match =
+            line.match(
+              /pts_time:([0-9.]+)/
+            );
+
+          if (!match) {
+            return;
+          }
+
+          const timestamp =
+            Number(match[1]);
+
+          if (
+            !Number.isFinite(timestamp)
+          ) {
+            return;
+          }
+
+          if (
+            timestamp <= 0 ||
+            timestamp >= duration
+          ) {
+            return;
+          }
+
+          timestamps.push(
+            Number(
+              timestamp.toFixed(3)
+            )
+          );
+        }
+      )
+      .on(
+        "end",
+        () => {
+          /*
+           * Sort first.
+           */
+          timestamps.sort(
+            (a, b) => a - b
+          );
+
+          /*
+           * Remove very close scene changes.
+           *
+           * Example:
+           * 2.01
+           * 2.08
+           * 2.14
+           *
+           * These should not consume three
+           * separate frame slots.
+           */
+          const filtered = [];
+
+          for (
+            const timestamp of timestamps
+          ) {
+            const previous =
+              filtered[
+                filtered.length - 1
+              ];
+
+            if (
+              previous === undefined ||
+              timestamp - previous >=
+                SCENE_MIN_GAP
+            ) {
+              filtered.push(
+                timestamp
+              );
+            }
+          }
+
+          console.log(
+            `[Video Scenes] Detected ${filtered.length} scene-change timestamps`
+          );
+
+          resolve(filtered);
+        }
+      )
+      .on(
+        "error",
+        (error) => {
+          /*
+           * Scene detection is optional.
+           * Never fail the complete video analysis
+           * just because scene detection fails.
+           */
+          console.warn(
+            "[Video Scenes] Scene detection failed:",
+            error.message
+          );
+
+          resolve([]);
+        }
+      )
       .run();
   });
 };
 
+
+/* =========================================================
+   TIMESTAMP UTILITIES
+========================================================= */
+
 /**
- * Remove a temporary directory safely.
+ * Check whether a timestamp is already represented
+ * by another timestamp.
  */
-const removeTempDirectory = (tempDir) => {
+const isTimestampCovered = (
+  timestamps,
+  timestamp,
+  gap = TIMESTAMP_MERGE_GAP
+) => {
+  return timestamps.some(
+    (existing) =>
+      Math.abs(
+        existing - timestamp
+      ) < gap
+  );
+};
+
+
+/**
+ * Add a timestamp only when it is not already covered.
+ */
+const addTimestampIfUnique = (
+  collection,
+  timestamp
+) => {
+  if (
+    !isTimestampCovered(
+      collection,
+      timestamp
+    )
+  ) {
+    collection.push(timestamp);
+    return true;
+  }
+
+  return false;
+};
+
+
+/* =========================================================
+   TIMESTAMP SELECTION
+========================================================= */
+
+/**
+ * Select timestamps using:
+ *
+ * 1. Even timeline coverage
+ * 2. Important scene changes
+ *
+ * The algorithm guarantees that normal timeline
+ * coverage is not completely replaced by scene changes.
+ */
+const selectFrameTimestamps = ({
+  duration,
+  targetCount,
+  sceneChanges,
+}) => {
+  const evenlyDistributed =
+    generateEvenTimestamps(
+      duration,
+      targetCount
+    );
+
+  const selected = [];
+
+  /*
+   * -------------------------------------------------------
+   * STEP 1
+   * Add evenly distributed timestamps first.
+   *
+   * This guarantees timeline coverage.
+   * -------------------------------------------------------
+   */
+
+  for (
+    const timestamp of
+    evenlyDistributed
+  ) {
+    if (
+      selected.length >= targetCount
+    ) {
+      break;
+    }
+
+    addTimestampIfUnique(
+      selected,
+      timestamp
+    );
+  }
+
+  /*
+   * -------------------------------------------------------
+   * STEP 2
+   * Add scene changes.
+   *
+   * Replace the least useful timeline point only
+   * when we are already at the frame limit.
+   * -------------------------------------------------------
+   */
+
+  for (
+    const sceneTimestamp of
+    sceneChanges
+  ) {
+    /*
+     * If there is already a nearby frame,
+     * no need to add another one.
+     */
+    if (
+      isTimestampCovered(
+        selected,
+        sceneTimestamp
+      )
+    ) {
+      continue;
+    }
+
+    /*
+     * We still have room.
+     */
+    if (
+      selected.length < targetCount
+    ) {
+      selected.push(
+        sceneTimestamp
+      );
+
+      continue;
+    }
+
+    /*
+     * -----------------------------------------------------
+     * We are already at targetCount.
+     *
+     * Find the timeline frame closest to this scene.
+     *
+     * If we replace a nearby evenly-distributed frame,
+     * we preserve approximately the same timeline coverage
+     * while giving preference to the scene change.
+     * -----------------------------------------------------
+     */
+
+    let closestIndex = -1;
+    let closestDistance = Infinity;
+
+    for (
+      let i = 0;
+      i < selected.length;
+      i += 1
+    ) {
+      const distance =
+        Math.abs(
+          selected[i] -
+            sceneTimestamp
+        );
+
+      if (
+        distance <
+        closestDistance
+      ) {
+        closestDistance =
+          distance;
+
+        closestIndex = i;
+      }
+    }
+
+    /*
+     * Only replace if the existing timestamp
+     * is reasonably close to the scene change.
+     *
+     * Otherwise adding the scene would distort
+     * timeline coverage too much.
+     */
+    if (
+      closestIndex !== -1 &&
+      closestDistance <= 1.5
+    ) {
+      selected[
+        closestIndex
+      ] = sceneTimestamp;
+    }
+  }
+
+  /*
+   * -------------------------------------------------------
+   * STEP 3
+   * Final cleanup.
+   * -------------------------------------------------------
+   */
+
+  const finalTimestamps =
+    [...new Set(selected)]
+      .filter(
+        (timestamp) =>
+          timestamp > 0 &&
+          timestamp < duration
+      )
+      .sort(
+        (a, b) => a - b
+      );
+
+  /*
+   * -------------------------------------------------------
+   * STEP 4
+   * Safety fallback.
+   *
+   * Make sure short videos still have at least
+   * MIN_FRAMES where possible.
+   * -------------------------------------------------------
+   */
+
+  if (
+    finalTimestamps.length <
+      Math.min(
+        MIN_FRAMES,
+        targetCount
+      )
+  ) {
+    for (
+      const timestamp of
+      evenlyDistributed
+    ) {
+      if (
+        finalTimestamps.length >=
+        Math.min(
+          MIN_FRAMES,
+          targetCount
+        )
+      ) {
+        break;
+      }
+
+      if (
+        !isTimestampCovered(
+          finalTimestamps,
+          timestamp
+        )
+      ) {
+        finalTimestamps.push(
+          timestamp
+        );
+      }
+    }
+  }
+
+  return finalTimestamps.sort(
+    (a, b) => a - b
+  );
+};
+
+
+/* =========================================================
+   FRAME EXTRACTION
+========================================================= */
+
+const extractSingleFrame = (
+  videoPath,
+  outputPath,
+  timestamp
+) => {
+  return new Promise(
+    (resolve, reject) => {
+      ffmpeg(videoPath)
+        .inputOptions([
+          "-ss",
+          String(timestamp),
+        ])
+        .outputOptions([
+          "-frames:v",
+          "1",
+          "-q:v",
+          "2",
+          "-threads",
+          "1",
+        ])
+        .output(outputPath)
+        .on(
+          "end",
+          resolve
+        )
+        .on(
+          "error",
+          reject
+        )
+        .run();
+    }
+  );
+};
+
+
+/* =========================================================
+   CLEANUP
+========================================================= */
+
+const removeTempDirectory = (
+  tempDir
+) => {
   if (!tempDir) {
     return;
   }
 
   try {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, {
-        recursive: true,
-        force: true,
-      });
+    if (
+      fs.existsSync(tempDir)
+    ) {
+      fs.rmSync(
+        tempDir,
+        {
+          recursive: true,
+          force: true,
+        }
+      );
     }
   } catch (error) {
     console.error(
@@ -139,102 +589,160 @@ const removeTempDirectory = (tempDir) => {
   }
 };
 
-/**
- * Extract useful frames from a video.
- *
- * The returned frame objects intentionally preserve:
- *
- * - index
- * - fileName
- * - filePath
- * - timestampSeconds
- * - timestamp
- *
- * This allows the rest of TruthLens to tell the user WHERE in the
- * video a suspicious frame was detected.
- *
- * Existing callers can continue using:
- *
- *     frame.filePath
- *
- * without any changes.
- */
-const extractVideoFrames = async (videoBuffer, duration) => {
+
+/* =========================================================
+   MAIN EXTRACTION
+========================================================= */
+
+const extractVideoFrames = async (
+  videoBuffer,
+  duration
+) => {
   let tempDir = null;
 
   try {
-    if (!Buffer.isBuffer(videoBuffer) || videoBuffer.length === 0) {
-      throw new Error("Invalid or empty video buffer.");
+    /* -----------------------------------------------------
+       VALIDATION
+    ----------------------------------------------------- */
+
+    if (
+      !Buffer.isBuffer(
+        videoBuffer
+      ) ||
+      videoBuffer.length === 0
+    ) {
+      throw new Error(
+        "Invalid or empty video buffer."
+      );
     }
 
-    const numericDuration = Number(duration);
+    const numericDuration =
+      Number(duration);
 
-    if (!Number.isFinite(numericDuration) || numericDuration <= 0) {
-      throw new Error("Invalid video duration.");
+    if (
+      !Number.isFinite(
+        numericDuration
+      ) ||
+      numericDuration <= 0
+    ) {
+      throw new Error(
+        "Invalid video duration."
+      );
     }
+
+    /* -----------------------------------------------------
+       TEMP DIRECTORY
+    ----------------------------------------------------- */
+
+    tempDir =
+      fs.mkdtempSync(
+        path.join(
+          os.tmpdir(),
+          "truthlens-video-"
+        )
+      );
+
+    const videoPath =
+      path.join(
+        tempDir,
+        "input-video.mp4"
+      );
+
+    const framesDir =
+      path.join(
+        tempDir,
+        "frames"
+      );
+
+    fs.mkdirSync(
+      framesDir,
+      {
+        recursive: true,
+      }
+    );
+
+    fs.writeFileSync(
+      videoPath,
+      videoBuffer
+    );
+
+    /* -----------------------------------------------------
+       FRAME CONFIGURATION
+    ----------------------------------------------------- */
+
+    const targetFrameCount =
+      getTargetFrameCount(
+        numericDuration
+      );
 
     /*
-     * Create an isolated temporary directory for this verification.
-     *
-     * Example:
-     * /tmp/truthlens-video-AbCd12/
+     * IMPORTANT:
+     * Scene detection happens exactly once.
      */
-    tempDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "truthlens-video-")
-    );
+    const sceneChanges =
+      await detectSceneChanges(
+        videoPath,
+        numericDuration
+      );
 
-    const videoPath = path.join(tempDir, "input-video.mp4");
-    const framesDir = path.join(tempDir, "frames");
+    const timestamps =
+      selectFrameTimestamps({
+        duration:
+          numericDuration,
 
-    fs.mkdirSync(framesDir, {
-      recursive: true,
-    });
+        targetCount:
+          targetFrameCount,
 
-    fs.writeFileSync(videoPath, videoBuffer);
+        sceneChanges,
+      });
 
-    const frameCount = getTargetFrameCount(numericDuration);
-
-    const timestamps = generateTimestamps(
-      numericDuration,
-      frameCount
-    );
+    if (
+      !timestamps.length
+    ) {
+      throw new Error(
+        "Unable to determine useful video frame timestamps."
+      );
+    }
 
     console.log(
-      `[Video Frames] Extracting ${timestamps.length} frames from ${numericDuration.toFixed(
+      `[Video Frames] Selected ${timestamps.length} timestamps from ${numericDuration.toFixed(
         2
       )} second video`
     );
 
     console.log(
-      `[Video Frames] Target timestamps: ${timestamps
-        .map((timestamp) => formatTimestamp(timestamp))
+      `[Video Frames] Selected timestamps: ${timestamps
+        .map(formatTimestamp)
         .join(", ")}`
     );
 
+    /* -----------------------------------------------------
+       EXTRACT FRAMES
+    ----------------------------------------------------- */
+
     const frames = [];
 
-    /*
-     * Extract frames sequentially.
-     *
-     * Sequential extraction is intentional here:
-     * - avoids spawning too many FFmpeg processes
-     * - keeps CPU/RAM usage predictable
-     * - works better on the hackathon/development machine
-     *
-     * Later, this can be moved to a worker queue with controlled
-     * concurrency for production.
-     */
-    for (let i = 0; i < timestamps.length; i += 1) {
-      const timestamp = timestamps[i];
+    for (
+      let i = 0;
+      i < timestamps.length;
+      i += 1
+    ) {
+      const timestamp =
+        timestamps[i];
 
-      const frameNumber = i + 1;
+      const frameNumber =
+        i + 1;
 
-      const fileName = `frame-${String(frameNumber).padStart(
-        3,
-        "0"
-      )}.jpg`;
+      const fileName =
+        `frame-${String(
+          frameNumber
+        ).padStart(3, "0")}.jpg`;
 
-      const filePath = path.join(framesDir, fileName);
+      const filePath =
+        path.join(
+          framesDir,
+          fileName
+        );
 
       console.log(
         `[Video Frames] Extracting frame ${frameNumber}/${timestamps.length} at ${formatTimestamp(
@@ -249,11 +757,11 @@ const extractVideoFrames = async (videoBuffer, duration) => {
           timestamp
         );
 
-        /*
-         * FFmpeg can technically finish successfully while producing
-         * an unexpected/empty output in unusual corrupted-video cases.
-         */
-        if (!fs.existsSync(filePath)) {
+        if (
+          !fs.existsSync(
+            filePath
+          )
+        ) {
           console.warn(
             `[Video Frames] Frame ${frameNumber} was not created.`
           );
@@ -261,9 +769,14 @@ const extractVideoFrames = async (videoBuffer, duration) => {
           continue;
         }
 
-        const stats = fs.statSync(filePath);
+        const stats =
+          fs.statSync(
+            filePath
+          );
 
-        if (stats.size === 0) {
+        if (
+          stats.size === 0
+        ) {
           console.warn(
             `[Video Frames] Frame ${frameNumber} is empty.`
           );
@@ -271,35 +784,39 @@ const extractVideoFrames = async (videoBuffer, duration) => {
           continue;
         }
 
+        /*
+         * Scene flag can be determined immediately
+         * because sceneChanges were already calculated.
+         */
+        const isSceneChange =
+          sceneChanges.some(
+            (sceneTimestamp) =>
+              Math.abs(
+                sceneTimestamp -
+                  timestamp
+              ) <
+              TIMESTAMP_MERGE_GAP
+          );
+
         frames.push({
-          index: frames.length + 1,
+          index:
+            frames.length + 1,
 
           fileName,
 
           filePath,
 
-          /*
-           * Machine-readable timestamp.
-           *
-           * Example:
-           * 4.71
-           */
-          timestampSeconds: timestamp,
+          timestampSeconds:
+            timestamp,
 
-          /*
-           * Human-readable timestamp.
-           *
-           * Example:
-           * "00:04.71"
-           */
-          timestamp: formatTimestamp(timestamp),
+          timestamp:
+            formatTimestamp(
+              timestamp
+            ),
+
+          isSceneChange,
         });
       } catch (error) {
-        /*
-         * One failed frame should not destroy the entire video
-         * verification. The remaining frames can still provide
-         * useful evidence.
-         */
         console.warn(
           `[Video Frames] Failed to extract frame ${frameNumber} at ${formatTimestamp(
             timestamp
@@ -308,7 +825,13 @@ const extractVideoFrames = async (videoBuffer, duration) => {
       }
     }
 
-    if (frames.length === 0) {
+    /* -----------------------------------------------------
+       FINAL VALIDATION
+    ----------------------------------------------------- */
+
+    if (
+      frames.length === 0
+    ) {
       throw new Error(
         "Unable to extract any usable frames from the video."
       );
@@ -318,15 +841,10 @@ const extractVideoFrames = async (videoBuffer, duration) => {
       `[Video Frames] Successfully extracted ${frames.length}/${timestamps.length} frames`
     );
 
-    /*
-     * IMPORTANT:
-     *
-     * We return tempDir instead of deleting it here because the
-     * verification service still needs to read the frame files.
-     *
-     * videoVerificationService.js should remove tempDir after
-     * analysis finishes, preferably inside finally{}.
-     */
+    /* -----------------------------------------------------
+       RETURN
+    ----------------------------------------------------- */
+
     return {
       tempDir,
 
@@ -336,25 +854,25 @@ const extractVideoFrames = async (videoBuffer, duration) => {
 
       frames,
 
-      /*
-       * Useful metadata for the verification service.
-       */
-      framesRequested: timestamps.length,
+      framesRequested:
+        timestamps.length,
 
-      framesExtracted: frames.length,
+      framesExtracted:
+        frames.length,
 
       timestamps,
+
+      sceneChanges,
     };
   } catch (error) {
-    /*
-     * If extraction itself fails, there is no reason to keep the
-     * temporary directory.
-     */
-    removeTempDirectory(tempDir);
+    removeTempDirectory(
+      tempDir
+    );
 
     throw error;
   }
 };
+
 
 module.exports = {
   extractVideoFrames,
