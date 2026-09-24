@@ -11,6 +11,12 @@ import {
   FileCheck2,
   ShieldCheck,
   Loader2,
+  Video,
+  AlertTriangle,
+  Clock3,
+  Activity,
+  ScanSearch,
+  Layers3,
 } from "lucide-react";
 
 import {
@@ -34,18 +40,136 @@ import VerificationDetails from "./components/VerificationDetails";
 import "./Result.css";
 
 
+/*
+ * ============================================================
+ * VIDEO ANALYSIS TYPES
+ * ============================================================
+ */
+
+type VideoFrame = {
+  frameIndex?: number;
+  fileName?: string;
+  timestampSeconds?: number;
+  timestamp?: string;
+  frameRisk?: number;
+  suspicious?: boolean;
+  highRisk?: boolean;
+  frameConfidence?: number;
+  isSceneChange?: boolean;
+};
+
+type SuspiciousFrame = {
+  frameIndex?: number;
+  fileName?: string;
+  timestampSeconds?: number;
+  timestamp?: string;
+  frameRisk?: number;
+  manipulationScore?: number;
+  aiGeneratedScore?: number;
+  confidence?: number;
+  isSceneChange?: boolean;
+};
+
+type SuspiciousSegmentFrame = {
+  frameIndex?: number;
+  timestamp?: string;
+  timestampSeconds?: number;
+  frameRisk?: number;
+  confidence?: number;
+  isSceneChange?: boolean;
+};
+
+type SuspiciousSegment = {
+  segmentIndex?: number;
+  startTimeSeconds?: number;
+  endTimeSeconds?: number;
+  startTimestamp?: string;
+  endTimestamp?: string;
+  durationSeconds?: number;
+  framesCount?: number;
+  averageRisk?: number;
+  peakRisk?: number;
+  averageConfidence?: number;
+  severity?: "Moderate" | "Elevated" | "High";
+  frames?: SuspiciousSegmentFrame[];
+};
+
+type VideoAnalysis = {
+  averageRisk?: number;
+  peakRisk?: number;
+  fusedRisk?: number;
+
+  suspiciousFrameRatio?: number;
+  suspiciousFramePercentage?: number;
+  suspiciousFrameCount?: number;
+  suspiciousSegmentCount?: number;
+
+  evidenceQuality?: string;
+
+  frames?: VideoFrame[];
+  suspiciousFrames?: SuspiciousFrame[];
+  suspiciousSegments?: SuspiciousSegment[];
+};
+
+
+/*
+ * ============================================================
+ * EXTENDED VERIFICATION TYPE
+ * ============================================================
+ *
+ * Keeps the existing Verification type while allowing the
+ * newer video-analysis fields returned by the backend.
+ */
+
+type ResultVerification = Verification & {
+  evidenceQuality?: number | string;
+
+  fusion?: {
+    evidenceQuality?: number | string;
+    forensicRisk?: number;
+    visualRisk?: number | null;
+    independentSignals?: number;
+  };
+
+  visualAnalysis?: {
+    available?: boolean;
+    manipulationScore?: number | null;
+    confidence?: number;
+    verdict?: string;
+    findings?: string[];
+    evidenceQuality?: number | string;
+  };
+
+  riskScore?: number;
+
+  videoAnalysis?: VideoAnalysis;
+
+  metadata?: {
+    filename?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    sizeMB?: number;
+
+    duration?: number;
+    width?: number;
+    height?: number;
+    fps?: number;
+    codec?: string;
+    format?: string;
+
+    framesAnalyzed?: number;
+    totalFrames?: number;
+    sceneChanges?: number;
+  };
+};
+
+
 export default function ResultPage() {
 
   /*
    * ========================================================
    * VERIFICATION ID
    * ========================================================
-   *
-   * App.tsx:
-   *
-   * /result/:verificationId
-   *
-   * Therefore we read verificationId from the URL.
    */
 
   const {
@@ -54,16 +178,11 @@ export default function ResultPage() {
     verificationId: string;
   }>();
 
+
   /*
    * ========================================================
    * VERIFICATION PASSED FROM VERIFY PAGE
    * ========================================================
-   *
-   * VerifyPage already has the full verification result
-   * from the create request. If it's available in router
-   * state, use it directly instead of re-fetching from the
-   * server. Falls back to a fetch below when this page is
-   * loaded directly (refresh, shared link, back button).
    */
 
   const location =
@@ -95,8 +214,8 @@ export default function ResultPage() {
     verification,
     setVerification,
   ] =
-    useState<Verification | null>(
-      stateVerification || null
+    useState<ResultVerification | null>(
+      (stateVerification as ResultVerification) || null
     );
 
   const [
@@ -120,10 +239,6 @@ export default function ResultPage() {
 
   useEffect(() => {
 
-    /*
-     * Already have the result from VerifyPage —
-     * no need to hit the server again.
-     */
     if (stateVerification) {
       return;
     }
@@ -158,7 +273,7 @@ export default function ResultPage() {
           );
 
           setVerification(
-            result
+            result as ResultVerification
           );
 
         } catch (err) {
@@ -281,76 +396,122 @@ export default function ResultPage() {
   const analysis =
     verification.analysis || [];
 
+  const videoAnalysis =
+    verification.videoAnalysis;
+
+  const isVideo =
+    verification.type?.toLowerCase() === "video";
+
 
   /*
    * ========================================================
    * EVIDENCE QUALITY
    * ========================================================
    *
-   * The backend may return:
+   * New video backend returns:
    *
-   * verification.fusion.evidenceQuality
+   * "Limited"
+   * "Good"
+   * "Strong"
    *
-   * or potentially:
-   *
-   * verification.evidenceQuality
-   *
-   * We use the real value when available.
-   *
-   * Otherwise we calculate a conservative fallback
-   * from the evidence count.
+   * Older image/text flows may still return a number.
    */
 
-  const verificationData =
-    verification as Verification & {
-      evidenceQuality?: number;
-
-      fusion?: {
-        evidenceQuality?: number;
-        forensicRisk?: number;
-        visualRisk?: number | null;
-        independentSignals?: number;
-      };
-
-      visualAnalysis?: {
-        available?: boolean;
-        manipulationScore?: number | null;
-        confidence?: number;
-        verdict?: string;
-        findings?: string[];
-        evidenceQuality?: number;
-      };
-
-      riskScore?: number;
-    };
-
-
   const backendEvidenceQuality =
-    verificationData.fusion
+    verification.fusion
       ?.evidenceQuality ??
-    verificationData.evidenceQuality ??
-    verificationData.visualAnalysis
+    verification.evidenceQuality ??
+    verification.visualAnalysis
       ?.evidenceQuality;
 
 
-  const evidenceQuality =
-    typeof backendEvidenceQuality ===
-      "number"
-      ? Math.max(
+  const getEvidenceQualityNumber =
+    (
+      quality: number | string | undefined
+    ): number => {
+
+      if (
+        typeof quality === "number"
+      ) {
+
+        return Math.max(
           0,
           Math.min(
             100,
-            Math.round(
-              backendEvidenceQuality
-            )
+            Math.round(quality)
           )
-        )
-      : evidence.length > 0
-      ? Math.min(
-          100,
-          evidence.length * 10
-        )
-      : 0;
+        );
+      }
+
+
+      if (
+        typeof quality === "string"
+      ) {
+
+        const normalized =
+          quality.toLowerCase();
+
+        if (
+          normalized === "strong"
+        ) {
+          return 90;
+        }
+
+        if (
+          normalized === "good"
+        ) {
+          return 75;
+        }
+
+        if (
+          normalized === "moderate"
+        ) {
+          return 55;
+        }
+
+        if (
+          normalized === "limited"
+        ) {
+          return 35;
+        }
+
+        if (
+          normalized === "unavailable"
+        ) {
+          return 0;
+        }
+
+        const numeric =
+          Number(quality);
+
+        if (
+          !Number.isNaN(numeric)
+        ) {
+
+          return Math.max(
+            0,
+            Math.min(
+              100,
+              Math.round(numeric)
+            )
+          );
+        }
+      }
+
+
+      return evidence.length > 0
+        ? Math.min(
+            100,
+            evidence.length * 10
+          )
+        : 0;
+    };
+
+
+  const evidenceQuality =
+    getEvidenceQualityNumber(
+      backendEvidenceQuality
+    );
 
 
   /*
@@ -361,8 +522,42 @@ export default function ResultPage() {
 
   const getEvidenceStrength =
     (
-      quality: number
+      quality: number,
+      backendQuality?: number | string
     ) => {
+
+      if (
+        typeof backendQuality === "string"
+      ) {
+
+        const normalized =
+          backendQuality.toLowerCase();
+
+        if (
+          normalized === "strong"
+        ) {
+          return "Strong";
+        }
+
+        if (
+          normalized === "good"
+        ) {
+          return "Good";
+        }
+
+        if (
+          normalized === "moderate"
+        ) {
+          return "Moderate";
+        }
+
+        if (
+          normalized === "limited"
+        ) {
+          return "Limited";
+        }
+      }
+
 
       if (quality >= 70) {
         return "Strong";
@@ -382,7 +577,8 @@ export default function ResultPage() {
 
   const evidenceStrength =
     getEvidenceStrength(
-      evidenceQuality
+      evidenceQuality,
+      backendEvidenceQuality
     );
 
 
@@ -394,7 +590,64 @@ export default function ResultPage() {
 
   const sourcesAnalyzed =
     verification.sourcesAnalyzed ??
+    (
+      isVideo
+        ? verification.metadata?.framesAnalyzed
+        : undefined
+    ) ??
     evidence.length;
+
+
+  /*
+   * ========================================================
+   * VIDEO METRICS
+   * ========================================================
+   */
+
+  const videoFramesAnalyzed =
+    videoAnalysis?.frames?.length ??
+    verification.metadata?.framesAnalyzed ??
+    0;
+
+  const suspiciousFrameCount =
+    videoAnalysis?.suspiciousFrameCount ??
+    videoAnalysis?.suspiciousFrames?.length ??
+    0;
+
+  const suspiciousSegmentCount =
+    videoAnalysis?.suspiciousSegmentCount ??
+    videoAnalysis?.suspiciousSegments?.length ??
+    0;
+
+  const averageRisk =
+    typeof videoAnalysis?.averageRisk === "number"
+      ? Math.round(videoAnalysis.averageRisk)
+      : null;
+
+  const peakRisk =
+    typeof videoAnalysis?.peakRisk === "number"
+      ? Math.round(videoAnalysis.peakRisk)
+      : null;
+
+  const fusedRisk =
+    typeof videoAnalysis?.fusedRisk === "number"
+      ? Math.round(videoAnalysis.fusedRisk)
+      : null;
+
+  const suspiciousFramePercentage =
+    typeof videoAnalysis?.suspiciousFramePercentage === "number"
+      ? Math.round(videoAnalysis.suspiciousFramePercentage)
+      : typeof videoAnalysis?.suspiciousFrameRatio === "number"
+      ? Math.round(
+          videoAnalysis.suspiciousFrameRatio * 100
+        )
+      : videoFramesAnalyzed > 0
+      ? Math.round(
+          (suspiciousFrameCount /
+            videoFramesAnalyzed) *
+            100
+        )
+      : 0;
 
 
   /*
@@ -464,10 +717,11 @@ export default function ResultPage() {
 
         {/* ===================================================
             HISTORY SAVING DISABLED BANNER
-        =================================================== */}
+        ==================================================== */}
 
         {savedToHistory === false && (
           <div className="history-disabled-banner">
+
             <strong>
               This result wasn't saved to your history.
             </strong>
@@ -482,6 +736,7 @@ export default function ResultPage() {
             <Link to="/settings">
               Turn it on in Settings
             </Link>
+
           </div>
         )}
 
@@ -674,6 +929,433 @@ export default function ResultPage() {
 
 
           {/* =================================================
+              VIDEO ANALYSIS
+          ================================================== */}
+
+          {isVideo && videoAnalysis && (
+
+            <div className="video-analysis-panel">
+
+              <div className="video-analysis-header">
+
+                <div className="video-analysis-title">
+
+                  <div className="video-analysis-icon">
+                    <Video size={18} />
+                  </div>
+
+                  <div>
+
+                    <strong>
+                      Video Evidence Analysis
+                    </strong>
+
+                    <span>
+                      Frame-level visual evidence
+                      extracted from the submitted video.
+                    </span>
+
+                  </div>
+
+                </div>
+
+                <span
+                  className={`video-quality-badge ${
+                    evidenceStrength
+                      .toLowerCase()
+                      .replace(
+                        /\s+/g,
+                        "-"
+                      )
+                  }`}
+                >
+                  {videoAnalysis.evidenceQuality ||
+                    evidenceStrength}
+                </span>
+
+              </div>
+
+
+              {/* =================================================
+                  VIDEO METRICS
+              ================================================== */}
+
+              <div className="video-metrics-grid">
+
+                <div className="video-metric-card">
+
+                  <Activity size={17} />
+
+                  <span>
+                    Average Risk
+                  </span>
+
+                  <strong>
+                    {averageRisk !== null
+                      ? `${averageRisk}/100`
+                      : "N/A"}
+                  </strong>
+
+                </div>
+
+
+                <div className="video-metric-card">
+
+                  <AlertTriangle size={17} />
+
+                  <span>
+                    Peak Risk
+                  </span>
+
+                  <strong>
+                    {peakRisk !== null
+                      ? `${peakRisk}/100`
+                      : "N/A"}
+                  </strong>
+
+                </div>
+
+
+                <div className="video-metric-card">
+
+                  <Layers3 size={17} />
+
+                  <span>
+                    Fused Risk
+                  </span>
+
+                  <strong>
+                    {fusedRisk !== null
+                      ? `${fusedRisk}/100`
+                      : "N/A"}
+                  </strong>
+
+                </div>
+
+
+                <div className="video-metric-card">
+
+                  <ScanSearch size={17} />
+
+                  <span>
+                    Frames Analyzed
+                  </span>
+
+                  <strong>
+                    {videoFramesAnalyzed}
+                  </strong>
+
+                </div>
+
+
+                <div className="video-metric-card">
+
+                  <AlertTriangle size={17} />
+
+                  <span>
+                    Suspicious Frames
+                  </span>
+
+                  <strong>
+                    {suspiciousFrameCount}
+                    {" / "}
+                    {videoFramesAnalyzed}
+                  </strong>
+
+                </div>
+
+
+                <div className="video-metric-card">
+
+                  <Clock3 size={17} />
+
+                  <span>
+                    Suspicious Coverage
+                  </span>
+
+                  <strong>
+                    {suspiciousFramePercentage}%
+                  </strong>
+
+                </div>
+
+              </div>
+
+
+              {/* =================================================
+                  SUSPICIOUS SEGMENTS
+              ================================================== */}
+
+              {suspiciousSegmentCount > 0 &&
+                videoAnalysis.suspiciousSegments &&
+                videoAnalysis.suspiciousSegments.length > 0 && (
+
+                <div className="video-segments">
+
+                  <div className="video-subsection-heading">
+
+                    <div>
+
+                      <strong>
+                        Suspicious Segments
+                      </strong>
+
+                      <span>
+                        Consecutive frames showing elevated
+                        visual risk.
+                      </span>
+
+                    </div>
+
+                    <span>
+                      {suspiciousSegmentCount}
+                      {" "}
+                      {suspiciousSegmentCount === 1
+                        ? "segment"
+                        : "segments"}
+                    </span>
+
+                  </div>
+
+
+                  <div className="video-segment-list">
+
+                    {videoAnalysis.suspiciousSegments.map(
+                      (
+                        segment,
+                        index
+                      ) => (
+
+                        <div
+                          className="video-segment-card"
+                          key={
+                            segment.segmentIndex ??
+                            index
+                          }
+                        >
+
+                          <div className="video-segment-main">
+
+                            <div className="video-segment-number">
+                              {String(
+                                segment.segmentIndex ??
+                                index + 1
+                              ).padStart(
+                                2,
+                                "0"
+                              )}
+                            </div>
+
+                            <div>
+
+                              <strong>
+                                {segment.startTimestamp ||
+                                  formatSeconds(
+                                    segment.startTimeSeconds
+                                  )}
+
+                                {" — "}
+
+                                {segment.endTimestamp ||
+                                  formatSeconds(
+                                    segment.endTimeSeconds
+                                  )}
+                              </strong>
+
+                              <span>
+                                {segment.framesCount ?? 0}
+                                {" "}
+                                frames
+                                {" · "}
+                                {segment.durationSeconds !== undefined
+                                  ? `${segment.durationSeconds.toFixed(2)}s`
+                                  : "duration unavailable"}
+                              </span>
+
+                            </div>
+
+                          </div>
+
+
+                          <div className="video-segment-risk">
+
+                            <span
+                              className={
+                                `segment-severity ${
+                                  (
+                                    segment.severity ||
+                                    "Moderate"
+                                  ).toLowerCase()
+                                }`
+                              }
+                            >
+                              {segment.severity ||
+                                "Moderate"}
+                            </span>
+
+                            <strong>
+                              {typeof segment.peakRisk === "number"
+                                ? `${Math.round(
+                                    segment.peakRisk
+                                  )}/100`
+                                : "N/A"}
+                            </strong>
+
+                            <small>
+                              Peak risk
+                            </small>
+
+                          </div>
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+
+              {/* =================================================
+                  SUSPICIOUS FRAME DETAILS
+              ================================================== */}
+
+              {suspiciousFrameCount > 0 &&
+                videoAnalysis.suspiciousFrames &&
+                videoAnalysis.suspiciousFrames.length > 0 && (
+
+                <div className="video-suspicious-frames">
+
+                  <div className="video-subsection-heading">
+
+                    <div>
+
+                      <strong>
+                        Suspicious Frames
+                      </strong>
+
+                      <span>
+                        Individual frames that crossed
+                        the configured risk threshold.
+                      </span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div className="video-frame-list">
+
+                    {videoAnalysis.suspiciousFrames.map(
+                      (
+                        frame,
+                        index
+                      ) => (
+
+                        <div
+                          className="video-frame-row"
+                          key={
+                            `${frame.frameIndex ?? index}-${frame.timestampSeconds ?? index}`
+                          }
+                        >
+
+                          <div>
+
+                            <strong>
+                              Frame{" "}
+                              {frame.frameIndex ??
+                                index + 1}
+                            </strong>
+
+                            <span>
+                              {frame.timestamp ||
+                                formatSeconds(
+                                  frame.timestampSeconds
+                                )}
+                            </span>
+
+                          </div>
+
+
+                          <div className="video-frame-risk">
+
+                            <span>
+                              Risk
+                            </span>
+
+                            <strong>
+                              {typeof frame.frameRisk === "number"
+                                ? `${Math.round(
+                                    frame.frameRisk
+                                  )}/100`
+                                : "N/A"}
+                            </strong>
+
+                          </div>
+
+
+                          <div className="video-frame-confidence">
+
+                            <span>
+                              Confidence
+                            </span>
+
+                            <strong>
+                              {typeof frame.confidence === "number"
+                                ? `${Math.round(
+                                    frame.confidence
+                                  )}%`
+                                : "N/A"}
+                            </strong>
+
+                          </div>
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+
+              {/* =================================================
+                  NO SUSPICIOUS SEGMENTS
+              ================================================== */}
+
+              {suspiciousFrameCount === 0 && (
+
+                <div className="video-no-suspicious">
+
+                  <CheckCircle2
+                    size={18}
+                  />
+
+                  <div>
+
+                    <strong>
+                      No suspicious frames detected
+                    </strong>
+
+                    <span>
+                      None of the analyzed frames crossed
+                      the configured suspicious-risk threshold.
+                    </span>
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+
+          {/* =================================================
               EVIDENCE STRENGTH
           ================================================== */}
 
@@ -744,8 +1426,8 @@ export default function ResultPage() {
 
                 <p>
                   The verification engine
-                  did not return evidence
-                  for this verification.
+                  did not return external
+                  evidence for this verification.
                 </p>
 
               </div>
@@ -842,6 +1524,109 @@ export default function ResultPage() {
               verification.verificationId
             }
           />
+
+
+          {/* =================================================
+              VIDEO METADATA
+          ================================================== */}
+
+          {isVideo &&
+            verification.metadata && (
+
+            <div className="video-metadata">
+
+              <div className="video-metadata-heading">
+
+                <Video size={17} />
+
+                <strong>
+                  Video Metadata
+                </strong>
+
+              </div>
+
+
+              <div className="video-metadata-grid">
+
+                <div>
+                  <span>
+                    Duration
+                  </span>
+
+                  <strong>
+                    {formatDuration(
+                      verification.metadata.duration
+                    )}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Resolution
+                  </span>
+
+                  <strong>
+                    {verification.metadata.width &&
+                    verification.metadata.height
+                      ? `${verification.metadata.width} × ${verification.metadata.height}`
+                      : "N/A"}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Frame Rate
+                  </span>
+
+                  <strong>
+                    {verification.metadata.fps
+                      ? `${verification.metadata.fps} FPS`
+                      : "N/A"}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Codec
+                  </span>
+
+                  <strong>
+                    {verification.metadata.codec ||
+                      "N/A"}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Format
+                  </span>
+
+                  <strong>
+                    {verification.metadata.format ||
+                      "N/A"}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Scene Changes
+                  </span>
+
+                  <strong>
+                    {verification.metadata.sceneChanges ??
+                      0}
+                  </strong>
+                </div>
+
+              </div>
+
+            </div>
+          )}
 
         </section>
 
@@ -943,4 +1728,71 @@ export default function ResultPage() {
 
     </div>
   );
+}
+
+
+/*
+ * ============================================================
+ * HELPERS
+ * ============================================================
+ */
+
+function formatSeconds(
+  seconds?: number
+): string {
+
+  if (
+    typeof seconds !== "number" ||
+    !Number.isFinite(seconds)
+  ) {
+    return "Unknown time";
+  }
+
+  const totalSeconds =
+    Math.max(
+      0,
+      Math.round(seconds)
+    );
+
+  const minutes =
+    Math.floor(
+      totalSeconds / 60
+    );
+
+  const remainingSeconds =
+    totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(
+    remainingSeconds
+  ).padStart(2, "0")}`;
+}
+
+
+function formatDuration(
+  duration?: number
+): string {
+
+  if (
+    typeof duration !== "number" ||
+    !Number.isFinite(duration)
+  ) {
+    return "N/A";
+  }
+
+  const totalSeconds =
+    Math.round(duration);
+
+  const minutes =
+    Math.floor(
+      totalSeconds / 60
+    );
+
+  const seconds =
+    totalSeconds % 60;
+
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
 }

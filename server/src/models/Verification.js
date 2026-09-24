@@ -44,6 +44,7 @@ const evidenceSchema =
     }
   );
 
+
 /* =========================================================
    ANALYSIS SCHEMA
 ========================================================= */
@@ -65,6 +66,7 @@ const analysisSchema =
       _id: false,
     }
   );
+
 
 /* =========================================================
    SIGNAL SCHEMA
@@ -110,19 +112,23 @@ const signalSchema =
         required: true,
       },
     },
-
     {
       _id: false,
     }
   );
 
+
 /* =========================================================
-   IMAGE METADATA SCHEMA
+   IMAGE + VIDEO METADATA SCHEMA
 ========================================================= */
 
 const metadataSchema =
   new mongoose.Schema(
     {
+      /* =========================
+         GENERAL FILE INFORMATION
+      ========================= */
+
       filename: {
         type: String,
         default: "",
@@ -147,6 +153,7 @@ const metadataSchema =
         type: Number,
         default: 0,
       },
+
 
       /* =========================
          IMAGE METADATA
@@ -192,6 +199,7 @@ const metadataSchema =
         default: "",
       },
 
+
       /* =========================
          VIDEO METADATA
       ========================= */
@@ -230,14 +238,20 @@ const metadataSchema =
         type: Number,
         default: 0,
       },
+
+      sceneChanges: {
+        type: Number,
+        default: 0,
+      },
     },
     {
       _id: false,
     }
   );
 
+
 /* =========================================================
- FILE SCHEMA
+   FILE SCHEMA
 ========================================================= */
 
 const fileSchema =
@@ -273,7 +287,6 @@ const fileSchema =
         default: "",
       },
     },
-
     {
       _id: false,
     }
@@ -343,9 +356,32 @@ const visualAnalysisSchema =
         default: [],
       },
 
+
+      /* =====================================================
+         VIDEO EVIDENCE QUALITY
+      ===================================================== */
+
+      /*
+       * IMPORTANT:
+       *
+       * This used to be Number.
+       *
+       * The video analysis service returns:
+       *
+       * "Limited"
+       * "Good"
+       * "Strong"
+       */
       evidenceQuality: {
-        type: Number,
-        default: 0,
+        type: String,
+
+        enum: [
+          "Limited",
+          "Good",
+          "Strong",
+        ],
+
+        default: "Limited",
       },
 
       framesAnalyzed: {
@@ -356,6 +392,361 @@ const visualAnalysisSchema =
       totalFrames: {
         type: Number,
         default: 0,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   VIDEO FRAME SCHEMA
+========================================================= */
+
+const videoFrameSchema =
+  new mongoose.Schema(
+    {
+      frameIndex: {
+        type: Number,
+        required: true,
+      },
+
+      fileName: {
+        type: String,
+        default: "",
+      },
+
+      timestampSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      timestamp: {
+        type: String,
+        default: "",
+      },
+
+      frameRisk: {
+        type: Number,
+        default: null,
+      },
+
+      suspicious: {
+        type: Boolean,
+        default: false,
+      },
+
+      highRisk: {
+        type: Boolean,
+        default: false,
+      },
+
+      frameConfidence: {
+        type: Number,
+        default: null,
+      },
+
+      isSceneChange: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   SUSPICIOUS FRAME SCHEMA
+========================================================= */
+
+const suspiciousFrameSchema =
+  new mongoose.Schema(
+    {
+      frameIndex: {
+        type: Number,
+        required: true,
+      },
+
+      fileName: {
+        type: String,
+        default: "",
+      },
+
+      timestampSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      timestamp: {
+        type: String,
+        default: "",
+      },
+
+      frameRisk: {
+        type: Number,
+        default: null,
+      },
+
+      manipulationScore: {
+        type: Number,
+        default: null,
+      },
+
+      aiGeneratedScore: {
+        type: Number,
+        default: null,
+      },
+
+      confidence: {
+        type: Number,
+        default: null,
+      },
+
+      isSceneChange: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   SUSPICIOUS SEGMENT FRAME SCHEMA
+========================================================= */
+
+const suspiciousSegmentFrameSchema =
+  new mongoose.Schema(
+    {
+      frameIndex: {
+        type: Number,
+        required: true,
+      },
+
+      timestamp: {
+        type: String,
+        default: "",
+      },
+
+      timestampSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      frameRisk: {
+        type: Number,
+        default: null,
+      },
+
+      confidence: {
+        type: Number,
+        default: null,
+      },
+
+      isSceneChange: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   SUSPICIOUS SEGMENT SCHEMA
+========================================================= */
+
+const suspiciousSegmentSchema =
+  new mongoose.Schema(
+    {
+      segmentIndex: {
+        type: Number,
+        required: true,
+      },
+
+      startTimeSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      endTimeSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      startTimestamp: {
+        type: String,
+        default: "",
+      },
+
+      endTimestamp: {
+        type: String,
+        default: "",
+      },
+
+      durationSeconds: {
+        type: Number,
+        default: 0,
+      },
+
+      framesCount: {
+        type: Number,
+        default: 0,
+      },
+
+      averageRisk: {
+        type: Number,
+        default: null,
+      },
+
+      peakRisk: {
+        type: Number,
+        default: null,
+      },
+
+      averageConfidence: {
+        type: Number,
+        default: null,
+      },
+
+      severity: {
+        type: String,
+
+        enum: [
+          "Moderate",
+          "Elevated",
+          "High",
+        ],
+
+        default: "Moderate",
+      },
+
+      frames: {
+        type: [
+          suspiciousSegmentFrameSchema,
+        ],
+
+        default: [],
+      },
+    },
+    {
+      _id: false,
+    }
+  );
+
+
+/* =========================================================
+   VIDEO ANALYSIS SCHEMA
+========================================================= */
+
+const videoAnalysisSchema =
+  new mongoose.Schema(
+    {
+      /*
+       * Overall frame-risk statistics.
+       */
+
+      averageRisk: {
+        type: Number,
+        default: null,
+      },
+
+      peakRisk: {
+        type: Number,
+        default: null,
+      },
+
+      fusedRisk: {
+        type: Number,
+        default: null,
+      },
+
+
+      /*
+       * Suspicious frame statistics.
+       */
+
+      suspiciousFrameRatio: {
+        type: Number,
+        default: 0,
+      },
+
+      suspiciousFramePercentage: {
+        type: Number,
+        default: 0,
+      },
+
+      suspiciousFrameCount: {
+        type: Number,
+        default: 0,
+      },
+
+      suspiciousSegmentCount: {
+        type: Number,
+        default: 0,
+      },
+
+
+      /*
+       * Evidence quality.
+       */
+
+      evidenceQuality: {
+        type: String,
+
+        enum: [
+          "Limited",
+          "Good",
+          "Strong",
+        ],
+
+        default: "Limited",
+      },
+
+
+      /*
+       * All analyzed frames.
+       */
+
+      frames: {
+        type: [
+          videoFrameSchema,
+        ],
+
+        default: [],
+      },
+
+
+      /*
+       * Strongest suspicious frames.
+       */
+
+      suspiciousFrames: {
+        type: [
+          suspiciousFrameSchema,
+        ],
+
+        default: [],
+      },
+
+
+      /*
+       * Temporally connected suspicious regions.
+       */
+
+      suspiciousSegments: {
+        type: [
+          suspiciousSegmentSchema,
+        ],
+
+        default: [],
       },
     },
     {
@@ -397,8 +788,15 @@ const fusionSchema =
       },
 
       evidenceQuality: {
-        type: Number,
-        default: 0,
+        type: String,
+
+        enum: [
+          "Limited",
+          "Good",
+          "Strong",
+        ],
+
+        default: "Limited",
       },
 
       independentSignals: {
@@ -416,6 +814,7 @@ const fusionSchema =
     }
   );
 
+
 /* =========================================================
    VERIFICATION SCHEMA
 ========================================================= */
@@ -428,6 +827,11 @@ const verificationSchema =
         required: true,
         index: true,
       },
+
+
+      /* =====================================================
+         VERIFICATION TYPE
+      ===================================================== */
 
       type: {
         type: String,
@@ -442,6 +846,11 @@ const verificationSchema =
         required: true,
       },
 
+
+      /* =====================================================
+         CONTENT
+      ===================================================== */
+
       content: {
         type: String,
         required: true,
@@ -451,23 +860,50 @@ const verificationSchema =
         type: String,
         default: "",
       },
+
+
+      /* =====================================================
+         FILE
+      ===================================================== */
+
       file: {
         type: fileSchema,
         default: undefined,
       },
+
+
+      /* =====================================================
+         VISUAL ANALYSIS
+      ===================================================== */
 
       visualAnalysis: {
         type: visualAnalysisSchema,
         default: undefined,
       },
 
+
+      /* =====================================================
+         VIDEO ANALYSIS
+      ===================================================== */
+
+      videoAnalysis: {
+        type: videoAnalysisSchema,
+        default: undefined,
+      },
+
+
+      /* =====================================================
+         FUSION
+      ===================================================== */
+
       fusion: {
         type: fusionSchema,
         default: undefined,
       },
 
+
       /* =====================================================
-         RESULT
+         FINAL RESULT
       ===================================================== */
 
       verdict: {
@@ -500,28 +936,56 @@ const verificationSchema =
         default: "",
       },
 
+
+      /* =====================================================
+         ANALYSIS
+      ===================================================== */
+
       analysis: {
-        type: [analysisSchema],
+        type: [
+          analysisSchema,
+        ],
+
         default: [],
       },
+
+
+      /* =====================================================
+         EVIDENCE
+      ===================================================== */
 
       evidence: {
-        type: [evidenceSchema],
+        type: [
+          evidenceSchema,
+        ],
+
         default: [],
       },
 
+
+      /*
+       * IMPORTANT:
+       *
+       * This is for external sources/evidence.
+       * It is NOT the number of video frames.
+       */
       sourcesAnalyzed: {
         type: Number,
         default: 0,
       },
 
+
+      /*
+       * Actual processing duration.
+       */
       processingTime: {
         type: String,
         default: "",
       },
 
+
       /* =====================================================
-         IMAGE INFORMATION
+         FILE INFORMATION
       ===================================================== */
 
       fileHash: {
@@ -549,15 +1013,29 @@ const verificationSchema =
         default: "",
       },
 
+
+      /* =====================================================
+         METADATA
+      ===================================================== */
+
       metadata: {
         type: metadataSchema,
         default: undefined,
       },
 
+
+      /* =====================================================
+         SIGNALS
+      ===================================================== */
+
       signals: {
-        type: [signalSchema],
+        type: [
+          signalSchema,
+        ],
+
         default: [],
       },
+
 
       /* =====================================================
          VERIFICATION ID
@@ -575,6 +1053,7 @@ const verificationSchema =
       timestamps: true,
     }
   );
+
 
 /* =========================================================
    EXPORT
