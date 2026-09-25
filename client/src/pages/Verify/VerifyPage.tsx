@@ -222,9 +222,11 @@ export default function VerifyPage() {
              * VALIDATE RESULT
              * =================================================
              */
-            if (
-                !result.verification
-            ) {
+            if (!result) {
+                return;
+            }
+
+            if (!result.verification) {
                 throw new Error(
                     "Verification was created but no result was returned. Check the browser console for the raw server response."
                 );
