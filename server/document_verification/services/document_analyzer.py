@@ -7,33 +7,40 @@ from .layout_service import analyze_layout
 
 
 def analyze_document(file_path: str) -> dict:
-    """
-    Run the complete document verification analysis pipeline.
 
-    Pipeline:
-        1. OCR
-        2. Metadata
-        3. Text consistency
-        4. Layout analysis
-    """
+    filename = os.path.basename(
+        file_path
+    )
 
-    filename = os.path.basename(file_path)
+    with open(
+        file_path,
+        "rb"
+    ) as file:
+
+        file_bytes = file.read()
 
     # =====================================================
     # 1. OCR
     # =====================================================
 
     ocr_result = extract_text_from_file(
-        file_path,
+        file_bytes,
         filename
     )
 
-    if isinstance(ocr_result, dict):
-        extracted_text = ocr_result.get(
-            "text",
-            ""
-        )
+    if isinstance(
+        ocr_result,
+        dict
+    ):
+
+        extracted_text = \
+            ocr_result.get(
+                "text",
+                ""
+            )
+
     else:
+
         extracted_text = str(
             ocr_result or ""
         )
@@ -42,33 +49,35 @@ def analyze_document(file_path: str) -> dict:
     # 2. METADATA
     # =====================================================
 
-    metadata_result = analyze_metadata(
-        file_path
-    )
+    metadata_result = \
+        analyze_metadata(
+            file_bytes,
+            filename
+        )
 
     # =====================================================
     # 3. CONSISTENCY
     # =====================================================
 
-    consistency_result = analyze_consistency(
-        extracted_text
-    )
+    consistency_result = \
+        analyze_consistency(
+            extracted_text
+        )
 
     # =====================================================
     # 4. LAYOUT
     # =====================================================
 
-    layout_result = analyze_layout(
-        file_path,
-        extracted_text
-    )
-
-    # =====================================================
-    # FINAL ANALYSIS
-    # =====================================================
+    layout_result = \
+        analyze_layout(
+            file_path,
+            extracted_text
+        )
 
     return {
-        "filename": filename,
+
+        "filename":
+            filename,
 
         "extracted_text":
             extracted_text,

@@ -372,6 +372,7 @@ const visualAnalysisSchema =
        * "Good"
        * "Strong"
        */
+
       evidenceQuality: {
         type: String,
 
@@ -804,9 +805,10 @@ const fusionSchema =
         default: 0,
       },
 
+      // Document verification returns "low", "medium", or "high"
       confidence: {
-        type: Number,
-        default: 0,
+        type: String,
+        default: "medium",
       },
     },
     {
@@ -969,6 +971,7 @@ const verificationSchema =
        * This is for external sources/evidence.
        * It is NOT the number of video frames.
        */
+
       sourcesAnalyzed: {
         type: Number,
         default: 0,
@@ -978,6 +981,7 @@ const verificationSchema =
       /*
        * Actual processing duration.
        */
+
       processingTime: {
         type: String,
         default: "",

@@ -24,6 +24,7 @@ import {
     createVerification,
     createImageVerification,
     createVideoVerification,
+    createDocumentVerification,
 } from "../../services/verificationService";
 
 import "./Verify.css";
@@ -207,10 +208,13 @@ export default function VerifyPage() {
              * DOCUMENT VERIFICATION
              * =================================================
              */
-            else {
-                throw new Error(
-                    "Document verification is coming soon."
-                );
+            else if (type === "document") {
+                result =
+                    await createDocumentVerification(
+                        file!,
+                        source.trim(),
+                        token
+                    );
             }
 
             /*
@@ -218,9 +222,11 @@ export default function VerifyPage() {
              * VALIDATE RESULT
              * =================================================
              */
-            if (
-                !result.verification
-            ) {
+            if (!result) {
+                return;
+            }
+
+            if (!result.verification) {
                 throw new Error(
                     "Verification was created but no result was returned. Check the browser console for the raw server response."
                 );
