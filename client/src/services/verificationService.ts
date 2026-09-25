@@ -26,9 +26,9 @@ export interface VerificationRequest {
 
 export interface Evidence {
   type:
-    | "supporting"
-    | "contradicting"
-    | "context";
+  | "supporting"
+  | "contradicting"
+  | "context";
 
   title: string;
 
@@ -135,16 +135,16 @@ export interface VisualAnalysis {
   available?: boolean;
 
   manipulationScore?:
-    | number
-    | null;
+  | number
+  | null;
 
   aiGeneratedScore?:
-    | number
-    | null;
+  | number
+  | null;
 
   visualAuthenticityScore?:
-    | number
-    | null;
+  | number
+  | null;
 
   confidence?: number;
 
@@ -170,8 +170,8 @@ export interface VerificationFusion {
   forensicRisk?: number;
 
   visualRisk?:
-    | number
-    | null;
+  | number
+  | null;
 
   evidenceQuality?: number;
 
@@ -197,12 +197,12 @@ export interface ImageProperties {
   hasAlpha?: boolean;
 
   orientation?:
-    | number
-    | null;
+  | number
+  | null;
 
   density?:
-    | number
-    | null;
+  | number
+  | null;
 
   format?: string;
 
@@ -734,9 +734,9 @@ export const createImageVerification = async (
 
           headers: token
             ? {
-                Authorization:
-                  `Bearer ${token}`,
-              }
+              Authorization:
+                `Bearer ${token}`,
+            }
             : undefined,
 
           body:
@@ -937,9 +937,9 @@ export const createVideoVerification = async (
 
           headers: token
             ? {
-                Authorization:
-                  `Bearer ${token}`,
-              }
+              Authorization:
+                `Bearer ${token}`,
+            }
             : undefined,
 
           body:
@@ -1012,6 +1012,130 @@ export const createVideoVerification = async (
   } catch (error) {
     console.error(
       "[TruthLens] Video verification error:",
+      error
+    );
+
+    throw error;
+  }
+};
+
+export const createDocumentVerification = async (
+  file: File,
+  source?: string,
+  token?: string
+): Promise<VerificationResponse> => {
+
+  if (!file) {
+    throw new Error(
+      "Please select a document."
+    );
+  }
+
+  const allowedTypes = [
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+  ];
+
+  if (
+    !allowedTypes.includes(file.type)
+  ) {
+    throw new Error(
+      "Unsupported document type. Please upload PDF, PNG, JPG, or WEBP."
+    );
+  }
+
+  const maxSize =
+    10 * 1024 * 1024;
+
+  if (file.size > maxSize) {
+    throw new Error(
+      "Document exceeds the maximum allowed size of 10 MB."
+    );
+  }
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "type",
+    "document"
+  );
+
+  formData.append(
+    "file",
+    file
+  );
+
+  if (source?.trim()) {
+    formData.append(
+      "source",
+      source.trim()
+    );
+  }
+
+  try {
+
+    console.log(
+      "[TruthLens] Uploading document:",
+      file.name
+    );
+
+    const response =
+      await fetch(
+        `${API_URL}/api/verifications`,
+        {
+          method: "POST",
+
+          headers: token
+            ? {
+              Authorization:
+                `Bearer ${token}`,
+            }
+            : undefined,
+
+          body: formData,
+        }
+      );
+
+    const result =
+      await parseJsonResponse(
+        response
+      ) as VerificationResponse | null;
+
+    console.log(
+      "[TruthLens] Document verification response:",
+      result
+    );
+
+    if (
+      !response.ok ||
+      !result?.success
+    ) {
+      throw new Error(
+        result?.message ||
+        `Document verification failed (${response.status}).`
+      );
+    }
+
+    if (!result.verification) {
+      throw new Error(
+        "Document verification result was missing."
+      );
+    }
+
+    result.verification =
+      normalizeVerification(
+        result.verification
+      );
+
+    return result;
+
+  } catch (error) {
+
+    console.error(
+      "[TruthLens] Document verification error:",
       error
     );
 

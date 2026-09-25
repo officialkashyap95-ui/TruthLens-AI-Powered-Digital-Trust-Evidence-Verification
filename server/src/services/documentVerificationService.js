@@ -1,57 +1,149 @@
-const { spawn } = require("child_process");
-const path = require("path");
+const {
+  spawn,
+} = require("child_process");
 
-const analyzeDocument = (filePath) => {
-  return new Promise((resolve, reject) => {
-    const pythonScript = path.join(
-      __dirname,
-      "../../../document_verification/run_verification.py"
-    );
+const path =
+  require("path");
 
-    const python = spawn("python3", [
-      pythonScript,
-      filePath,
-    ]);
+const fs =
+  require("fs");
 
-    let stdout = "";
-    let stderr = "";
+const os =
+  require("os");
 
-    python.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
+const analyzeDocument = (
+  file
+) => {
 
-    python.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
 
-    python.on("close", (code) => {
-      if (code !== 0) {
-        console.error("Python verification error:");
-        console.error(stderr);
-
-        return reject(
-          new Error(
-            stderr ||
-              "Document verification process failed."
-          )
+      const pythonScript =
+        path.join(
+          __dirname,
+          "../../document_verification/run_verification.py"
         );
-      }
+
+      const extension =
+        path.extname(
+          file.originalname
+        );
+
+      const tempFile =
+        path.join(
+          os.tmpdir(),
+          `truthlens-${Date.now()}${extension}`
+        );
 
       try {
-        const result = JSON.parse(stdout);
-        resolve(result);
-      } catch (error) {
-        console.error("Invalid Python JSON:");
-        console.error(stdout);
 
-        reject(
-          new Error(
-            "Python verification returned invalid JSON."
-          )
+        fs.writeFileSync(
+          tempFile,
+          file.buffer
+        );
+
+      } catch (error) {
+
+        return reject(
+          error
         );
       }
-    });
-  });
+
+      const python =
+        spawn(
+          "python",
+          [
+            pythonScript,
+            tempFile,
+          ]
+        );
+
+      let stdout = "";
+      let stderr = "";
+
+      python.stdout.on(
+        "data",
+        (data) => {
+          stdout +=
+            data.toString();
+        }
+      );
+
+      python.stderr.on(
+        "data",
+        (data) => {
+          stderr +=
+            data.toString();
+        }
+      );
+
+      python.on(
+        "close",
+        (code) => {
+
+          try {
+            fs.unlinkSync(
+              tempFile
+            );
+          } catch (error) {
+            console.error(
+              "Could not delete temporary document:",
+              error
+            );
+          }
+
+          if (code !== 0) {
+
+            console.error(
+              "Python verification error:"
+            );
+
+            console.error(
+              stderr
+            );
+
+            return reject(
+              new Error(
+                stderr ||
+                "Document verification process failed."
+              )
+            );
+          }
+
+          try {
+
+            const result =
+              JSON.parse(
+                stdout
+              );
+
+            resolve(
+              result
+            );
+
+          } catch (error) {
+
+            console.error(
+              "Invalid Python JSON:"
+            );
+
+            console.error(
+              stdout
+            );
+
+            reject(
+              new Error(
+                "Python verification returned invalid JSON."
+              )
+            );
+          }
+        }
+      );
+    }
+  );
 };
 
 module.exports = {

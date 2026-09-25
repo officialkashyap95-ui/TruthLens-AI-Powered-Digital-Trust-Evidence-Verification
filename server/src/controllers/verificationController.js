@@ -17,6 +17,9 @@ const {
   analyzeVideo,
 } = require("../services/video/videoVerificationService");
 
+const {
+  analyzeDocument,
+} = require("../services/documentVerificationService");
 /* =========================================================
    GET USER SETTINGS
 ========================================================= */
@@ -512,7 +515,194 @@ const createVerification = async (
       });
     }
 
+    if (type === "document") {
 
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please upload a document.",
+        });
+      }
+
+      console.log("");
+
+      console.log(
+        "Starting document verification..."
+      );
+
+      console.log(
+        "Filename:",
+        req.file.originalname
+      );
+
+      console.log(
+        "MIME type:",
+        req.file.mimetype
+      );
+
+      console.log(
+        "Size:",
+        (
+          req.file.size /
+          1024 /
+          1024
+        ).toFixed(2),
+        "MB"
+      );
+
+      const processingStart =
+        Date.now();
+
+      const analysis =
+        await analyzeDocument(
+          req.file
+        );
+
+      const verificationId =
+        generateVerificationId();
+
+      const fusion =
+        analysis.fusion || {};
+
+      const verificationData = {
+
+        userId,
+
+        type: "document",
+
+        content:
+          req.file.originalname,
+
+        source:
+          source || "",
+
+        verdict:
+          fusion.status ||
+          "Insufficient Evidence",
+
+        confidence:
+          analysis.ocr?.pages?.length
+            ? analysis.ocr.pages.reduce(
+              (sum, page) =>
+                sum + Number(page.average_confidence || 0),
+              0
+            ) / analysis.ocr.pages.length
+            : 0,
+
+        riskScore:
+          fusion.risk_score || 0,
+
+        summary:
+          fusion.recommendation ||
+          "Document analysis completed.",
+
+        analysis: [
+          {
+            title:
+              "OCR Analysis",
+
+            description:
+              `Extracted ${analysis.ocr?.word_count || 0
+              } words from the document.`,
+          },
+
+          {
+            title:
+              "Metadata Analysis",
+
+            description:
+              "Document metadata and file structure were analyzed.",
+          },
+
+          {
+            title:
+              "Consistency Analysis",
+
+            description:
+              analysis.consistency?.status ||
+              "No consistency status available.",
+          },
+
+          {
+            title:
+              "Layout Analysis",
+
+            description:
+              analysis.layout?.status ||
+              "No layout status available.",
+          },
+        ],
+
+        evidence:
+          fusion.evidence || [],
+
+        sourcesAnalyzed:
+          fusion.evidence_count || 0,
+
+        processingTime:
+          `${(
+            (Date.now() -
+              processingStart) /
+            1000
+          ).toFixed(2)} seconds`,
+
+        verificationId,
+
+        fileName:
+          req.file.originalname,
+
+        mimeType:
+          req.file.mimetype,
+
+        fileSize:
+          req.file.size,
+
+        documentAnalysis:
+          analysis,
+
+        fusion,
+      };
+
+      let verification =
+        verificationData;
+
+      if (settings.saveHistory) {
+
+        verification =
+          await Verification.create(
+            verificationData
+          );
+
+        console.log(
+          "Document verification saved:",
+          verification.verificationId
+        );
+
+      } else {
+
+        console.log(
+          "Document verification analyzed but history saving is disabled."
+        );
+      }
+
+      return res.status(201).json({
+
+        success: true,
+
+        message:
+          settings.saveHistory
+            ? "Document verification created successfully."
+            : "Document verification completed successfully. History saving is disabled.",
+
+        verification,
+
+        settings:
+          formatSettings(
+            settings
+          ),
+      });
+    }
     /* =====================================================
        OTHER TYPES
     ===================================================== */

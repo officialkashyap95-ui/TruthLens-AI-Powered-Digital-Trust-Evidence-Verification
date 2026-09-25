@@ -1,4 +1,6 @@
 import pytesseract
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 import pymupdf
 from PIL import Image
 import io
@@ -92,7 +94,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> Dict[str, Any]:
         # Scanned/image PDF → OCR
         else:
             pix = page.get_pixmap(
-                matrix=fitz.Matrix(2, 2),
+                matrix=pymupdf.Matrix(2, 2),
                 alpha=False
             )
 
